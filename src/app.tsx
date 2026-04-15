@@ -205,15 +205,24 @@ function Chat() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toasts = useKumoToastManager();
 
-  // Agent setup
+  // Agent setup with reconnection
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+
   const agent = useAgent<ChatAgent>({
     agent: "ChatAgent",
-    onOpen: useCallback(() => setConnected(true), []),
-    onClose: useCallback(() => setConnected(false), []),
-    onError: useCallback(
-      (error: Event) => console.error("WebSocket error:", error),
-      []
-    ),
+    onOpen: useCallback(() => {
+      console.log("[WebSocket] Connected");
+      setConnected(true);
+      setReconnectAttempt(0);
+    }, []),
+    onClose: useCallback((event: CloseEvent) => {
+      console.log("[WebSocket] Closed:", event.code, event.reason);
+      setConnected(false);
+    }, []),
+    onError: useCallback((error: Event) => {
+      console.error("[WebSocket] Error:", error);
+      setReconnectAttempt((prev) => prev + 1);
+    }, []),
     onMcpUpdate: useCallback(() => {}, []),
     onMessage: useCallback(
       (message: MessageEvent) => {
