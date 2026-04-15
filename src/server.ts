@@ -8,7 +8,7 @@ import {
   stepCountIs,
   streamText,
   tool,
-  type ModelMessage,
+  type ModelMessage
 } from "ai";
 import { z } from "zod";
 
@@ -19,7 +19,7 @@ async function searchWiki(
   options: {
     retrievalType?: "vector" | "keyword" | "hybrid";
     maxResults?: number;
-  } = {},
+  } = {}
 ) {
   return instance.search({
     messages: [{ role: "user", content: query }],
@@ -28,13 +28,13 @@ async function searchWiki(
         retrieval_type: options.retrievalType || "hybrid",
         fusion_method: "rrf",
         match_threshold: 0.4,
-        max_num_results: options.maxResults || 10,
+        max_num_results: options.maxResults || 10
       },
       reranking: {
         enabled: true,
-        model: "@cf/baai/bge-reranker-base",
-      },
-    },
+        model: "@cf/baai/bge-reranker-base"
+      }
+    }
   });
 }
 
@@ -42,7 +42,7 @@ async function uploadDocument(
   instance: AiSearchInstance,
   key: string,
   content: string,
-  metadata?: Record<string, unknown>,
+  metadata?: Record<string, unknown>
 ) {
   // AI Search requires ALL metadata values to be strings
   const stringMetadata: Record<string, string> = {};
@@ -55,7 +55,7 @@ async function uploadDocument(
 
   // Use uploadAndPoll to ensure document is fully processed before returning
   return instance.items.uploadAndPoll(key, content, {
-    metadata: stringMetadata,
+    metadata: stringMetadata
   });
 }
 
@@ -66,7 +66,7 @@ async function listDocuments(instance: AiSearchInstance) {
 
 async function getDocument(
   instance: AiSearchInstance,
-  key: string,
+  key: string
 ): Promise<string | null> {
   const item = instance.items.get(key);
   const result = await item.download();
@@ -104,15 +104,36 @@ function inlineDataUrls(messages: ModelMessage[]): ModelMessage[] {
         if (!match) return part;
         const bytes = Uint8Array.from(atob(match[2]), (c) => c.charCodeAt(0));
         return { ...part, data: bytes, mediaType: match[1] };
-      }),
+      })
     };
   });
+}
+
+// Activity types for logging agent actions
+type ActivityType =
+  | "ingest"
+  | "query"
+  | "schedule"
+  | "task_execute"
+  | "lint"
+  | "mcp_connect"
+  | "mcp_disconnect"
+  | "system";
+
+interface Activity {
+  id: string;
+  type: ActivityType;
+  subject: string;
+  details: string;
+  timestamp: number;
+  metadata?: string;
 }
 
 export class ChatAgent extends AIChatAgent<Env> {
   maxPersistedMessages = 100;
   private instance: AiSearchInstance | null = null;
   private initialized = false;
+  private activityBuffer: Activity[] = [];
 
   async onStart() {
     // Configure OAuth popup behavior for MCP servers that require authentication
@@ -121,18 +142,160 @@ export class ChatAgent extends AIChatAgent<Env> {
         if (result.authSuccess) {
           return new Response("<script>window.close();</script>", {
             headers: { "content-type": "text/html" },
-            status: 200,
+            status: 200
           });
         }
         return new Response(
           `Authentication Failed: ${result.authError || "Unknown error"}`,
-          { headers: { "content-type": "text/plain" }, status: 400 },
+          { headers: { "content-type": "text/plain" }, status: 400 }
         );
-      },
+      }
     });
+
+    // Initialize SQLite tables
+    await this.initializeTables();
 
     // Initialize AI Search wiki
     await this.initializeWiki();
+
+    // Log system startup
+    await this.logActivity(
+      "system",
+      "Agent started",
+      "Wiki agent initialized and ready"
+    );
+
+    // Broadcast agent ready state
+    this.broadcastAgentStatus("ready");
+  }
+
+  // Initialize SQLite tables for agent features
+  private async initializeTables() {
+    try {
+      // Activity log table
+      this.sql`
+        CREATE TABLE IF NOT EXISTS activities (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          details TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          metadata TEXT
+        )
+      `;
+
+      // Create index for faster queries
+      this.sql`
+        CREATE INDEX IF NOT EXISTS idx_activities_timestamp ON activities(timestamp DESC)
+      `;
+
+      this.sql`
+        CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)
+      `;
+
+      console.log("[Agent] SQLite tables initialized");
+    } catch (error) {
+      console.error("[Agent] Failed to initialize tables:", error);
+    }
+  }
+
+  // Log activity to SQLite
+  private async logActivity(
+    type: ActivityType,
+    subject: string,
+    details: string,
+    metadata?: Record<string, unknown>
+  ) {
+    try {
+      const activity: Activity = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type,
+        subject,
+        details,
+        timestamp: Date.now(),
+        metadata: metadata ? JSON.stringify(metadata) : undefined
+      };
+
+      this.sql`
+        INSERT INTO activities (id, type, subject, details, timestamp, metadata)
+        VALUES (${activity.id}, ${activity.type}, ${activity.subject}, ${activity.details}, ${activity.timestamp}, ${activity.metadata ?? null})
+      `;
+
+      // Also add to buffer for real-time updates
+      this.activityBuffer.unshift(activity);
+      if (this.activityBuffer.length > 50) {
+        this.activityBuffer.pop();
+      }
+
+      // Broadcast to connected clients
+      this.broadcast(
+        JSON.stringify({
+          type: "activity",
+          activity: {
+            ...activity,
+            timeAgo: this.formatTimeAgo(activity.timestamp)
+          }
+        })
+      );
+    } catch (error) {
+      console.error("[Agent] Failed to log activity:", error);
+    }
+  }
+
+  // Query recent activities from database
+  private queryActivities(limit: number = 20, type?: ActivityType): Activity[] {
+    try {
+      let results;
+      if (type) {
+        results = this.sql`
+          SELECT * FROM activities 
+          WHERE type = ${type}
+          ORDER BY timestamp DESC 
+          LIMIT ${limit}
+        `;
+      } else {
+        results = this.sql`
+          SELECT * FROM activities 
+          ORDER BY timestamp DESC 
+          LIMIT ${limit}
+        `;
+      }
+
+      return results.map((row) => ({
+        id: row.id as string,
+        type: row.type as ActivityType,
+        subject: row.subject as string,
+        details: row.details as string,
+        timestamp: row.timestamp as number,
+        metadata: row.metadata as string | undefined
+      }));
+    } catch (error) {
+      console.error("[Agent] Failed to get activities:", error);
+      return [];
+    }
+  }
+
+  // Format timestamp to relative time
+  private formatTimeAgo(timestamp: number): string {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  // Broadcast agent status to all connected clients
+  private broadcastAgentStatus(status: "ready" | "working" | "idle") {
+    this.broadcast(
+      JSON.stringify({
+        type: "agent-status",
+        status,
+        timestamp: new Date().toISOString()
+      })
+    );
   }
 
   // Initialize the wiki with AI Search instance
@@ -153,7 +316,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       const info = await this.instance.info();
       console.log(`[Wiki] Connected to instance: ${instanceId}`, {
         status: info.status,
-        hybrid: info.index_method,
+        hybrid: info.index_method
       });
 
       this.initialized = true;
@@ -179,7 +342,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       `# Personal Wiki Index
 
 ## Overview
-This is your personal agentic wiki with **hybrid search** (vector + keyword with RRF fusion).
+This is your personal wiki agent with **hybrid search** (vector + keyword with RRF fusion).
 
 ## How It Works
 1. **Ingest** documents using the "/ingest" command
@@ -193,7 +356,7 @@ This is your personal agentic wiki with **hybrid search** (vector + keyword with
 
 ---
 *Initialized: ${new Date(now).toLocaleString()}*`,
-      { category: "index", title: "Index" },
+      { category: "index", title: "Index" }
     );
 
     await uploadDocument(
@@ -207,12 +370,21 @@ This is your personal agentic wiki with **hybrid search** (vector + keyword with
 
 ---
 `,
-      { category: "log", title: "Activity Log" },
+      { category: "log", title: "Activity Log" }
     );
   }
 
-  // Update the activity log
-  private async updateLog(operation: string, subject: string, details: string) {
+  // Update the activity log (both markdown and SQLite)
+  private async updateLog(
+    operation: ActivityType,
+    subject: string,
+    details: string,
+    metadata?: Record<string, unknown>
+  ) {
+    // Log to SQLite for real-time feed
+    await this.logActivity(operation, subject, details, metadata);
+
+    // Also update markdown log if instance available
     if (!this.instance) return;
 
     const existingLog = await getDocument(this.instance, "log.md");
@@ -224,7 +396,7 @@ This is your personal agentic wiki with **hybrid search** (vector + keyword with
 
     await uploadDocument(this.instance, "log.md", newLog, {
       category: "log",
-      title: "Activity Log",
+      title: "Activity Log"
     });
   }
 
@@ -257,8 +429,42 @@ This is your personal agentic wiki with **hybrid search** (vector + keyword with
       initialized: true,
       stats: {
         totalPages: docs.length,
-        byCategory,
-      },
+        byCategory
+      }
+    };
+  }
+
+  // Get recent activities for the activity feed
+  @callable()
+  async getRecentActivities(limit: number = 20, type?: ActivityType) {
+    const activities = this.queryActivities(limit, type);
+    return {
+      activities: activities.map((a: Activity) => ({
+        ...a,
+        timeAgo: this.formatTimeAgo(a.timestamp),
+        metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+      })),
+      total: this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count || 0
+    };
+  }
+
+  // Get agent status and stats
+  @callable()
+  async getAgentStatus() {
+    const activities = this.queryActivities(1);
+    const lastActivity = activities[0];
+
+    return {
+      initialized: this.initialized,
+      wikiReady: this.instance !== null,
+      lastActivity: lastActivity
+        ? {
+            type: lastActivity.type,
+            subject: lastActivity.subject,
+            timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+          }
+        : null,
+      scheduledTasks: this.getSchedules().length
     };
   }
 
@@ -268,7 +474,7 @@ This is your personal agentic wiki with **hybrid search** (vector + keyword with
 
     const result = streamText({
       model: workersai("@cf/moonshotai/kimi-k2.5", {
-        sessionAffinity: this.sessionAffinity,
+        sessionAffinity: this.sessionAffinity
       }),
       system: `You are a Personal Wiki Agent with hybrid search capabilities. You help users build and query a personal knowledge base.
 
@@ -312,7 +518,7 @@ Users can also use:
 ${getSchedulePrompt({ date: new Date() })}`,
       messages: pruneMessages({
         messages: inlineDataUrls(await convertToModelMessages(this.messages)),
-        toolCalls: "before-last-2-messages",
+        toolCalls: "before-last-2-messages"
       }),
       tools: {
         ...mcpTools,
@@ -336,13 +542,17 @@ ${getSchedulePrompt({ date: new Date() })}`,
             if (!input) return "Invalid schedule type";
             try {
               this.schedule(input, "executeTask", description, {
-                idempotent: true,
+                idempotent: true
+              });
+              await this.updateLog("schedule", "Task scheduled", description, {
+                scheduleType: when.type,
+                input
               });
               return `Task scheduled: "${description}" (${when.type}: ${input})`;
             } catch (error) {
               return `Error scheduling task: ${error}`;
             }
-          },
+          }
         }),
 
         getScheduledTasks: tool({
@@ -351,13 +561,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
           execute: async () => {
             const tasks = this.getSchedules();
             return tasks.length > 0 ? tasks : "No scheduled tasks found.";
-          },
+          }
         }),
 
         cancelScheduledTask: tool({
           description: "Cancel a scheduled task by its ID",
           inputSchema: z.object({
-            taskId: z.string().describe("The ID of the task to cancel"),
+            taskId: z.string().describe("The ID of the task to cancel")
           }),
           execute: async ({ taskId }) => {
             try {
@@ -366,7 +576,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             } catch (error) {
               return `Error cancelling task: ${error}`;
             }
-          },
+          }
         }),
 
         // WIKI TOOLS
@@ -383,7 +593,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             tags: z
               .array(z.string())
               .optional()
-              .describe("Optional tags for categorization"),
+              .describe("Optional tags for categorization")
           }),
           execute: async ({ title, content, docType, tags }) => {
             if (!this.instance) {
@@ -399,26 +609,35 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 title: title,
                 tags: tags ? tags.join(", ") : "",
                 createdAt: String(now),
-                source: "ingest",
+                source: "ingest"
               };
 
               await uploadDocument(this.instance, docId, content, metadata);
-              await this.updateLog("ingest", title, `Added ${docType}`);
+              await this.updateLog(
+                "ingest",
+                title,
+                `Added ${docType} document to wiki`,
+                {
+                  docId,
+                  docType,
+                  tags: tags || []
+                }
+              );
 
               return {
                 success: true,
                 message: `Successfully ingested "${title}" as ${docType}. Document ID: ${docId}`,
                 docId,
                 searchable: true,
-                method: "hybrid (vector + keyword with RRF fusion)",
+                method: "hybrid (vector + keyword with RRF fusion)"
               };
             } catch (error) {
               return {
                 error: "Failed to upload document",
-                details: String(error),
+                details: String(error)
               };
             }
-          },
+          }
         }),
 
         queryWiki: tool({
@@ -433,7 +652,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             maxResults: z
               .number()
               .optional()
-              .describe("Maximum number of results (default: 5)"),
+              .describe("Maximum number of results (default: 5)")
           }),
           execute: async ({ query, retrievalType, maxResults }) => {
             if (!this.instance) {
@@ -442,13 +661,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             const searchResults = await searchWiki(this.instance, query, {
               retrievalType: retrievalType || "hybrid",
-              maxResults: maxResults || 5,
+              maxResults: maxResults || 5
             });
 
             await this.updateLog(
               "query",
               query,
-              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`,
+              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`
             );
 
             return {
@@ -462,10 +681,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 overallScore: chunk.score,
                 vectorScore: chunk.scoring_details?.vector_score || 0,
                 keywordScore: chunk.scoring_details?.keyword_score || 0,
-                fusionMethod: chunk.scoring_details?.fusion_method || "rrf",
-              })),
+                fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
+              }))
             };
-          },
+          }
         }),
 
         lintWiki: tool({
@@ -489,23 +708,23 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             if (!byCategory["source"] || byCategory["source"] === 0) {
               suggestions.push(
-                "Add some source documents (journal entries, articles) to build your wiki",
+                "Add some source documents (journal entries, articles) to build your wiki"
               );
             }
 
             await this.updateLog(
               "lint",
               "Health check",
-              `Checked ${allDocs.length} pages`,
+              `Checked ${allDocs.length} pages`
             );
 
             return {
               totalPages: allDocs.length,
               byCategory,
               suggestions,
-              healthy: suggestions.length === 0,
+              healthy: suggestions.length === 0
             };
-          },
+          }
         }),
 
         getWikiStats: tool({
@@ -534,14 +753,84 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 "Keyword index (BM25) for exact matches",
                 "RRF fusion for optimal ranking",
                 "Per-request retrieval type override",
-                "Detailed scoring transparency",
-              ],
+                "Detailed scoring transparency"
+              ]
             };
-          },
+          }
         }),
+
+        getActivityLog: tool({
+          description:
+            "Get recent agent activities from the activity feed. Shows what the agent has been doing autonomously.",
+          inputSchema: z.object({
+            limit: z
+              .number()
+              .optional()
+              .describe("Number of activities to retrieve (default: 10)"),
+            type: z
+              .enum([
+                "ingest",
+                "query",
+                "schedule",
+                "task_execute",
+                "lint",
+                "mcp_connect",
+                "mcp_disconnect",
+                "system"
+              ])
+              .optional()
+              .describe("Filter by activity type")
+          }),
+          execute: async ({ limit, type }) => {
+            const activities = this.queryActivities(limit || 10, type);
+            return {
+              activities: activities.map((a: Activity) => ({
+                id: a.id,
+                type: a.type,
+                subject: a.subject,
+                details: a.details,
+                timestamp: a.timestamp,
+                timeAgo: this.formatTimeAgo(a.timestamp),
+                metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+              })),
+              total:
+                this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count ||
+                0
+            };
+          }
+        }),
+
+        getAgentStatus: tool({
+          description:
+            "Get current agent status including initialization state, wiki readiness, and recent activity.",
+          inputSchema: z.object({}),
+          execute: async () => {
+            const activities = this.queryActivities(1);
+            const lastActivity = activities[0];
+            const schedules = this.getSchedules();
+
+            return {
+              initialized: this.initialized,
+              wikiReady: this.instance !== null,
+              status: this.initialized ? "ready" : "initializing",
+              lastActivity: lastActivity
+                ? {
+                    type: lastActivity.type,
+                    subject: lastActivity.subject,
+                    timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+                  }
+                : null,
+              scheduledTasks: schedules.length,
+              upcomingTasks: schedules.slice(0, 5).map((s) => ({
+                id: s.id,
+                description: s.payload
+              }))
+            };
+          }
+        })
       },
       stopWhen: stepCountIs(10),
-      abortSignal: options?.abortSignal,
+      abortSignal: options?.abortSignal
     });
 
     return result.toUIMessageStreamResponse();
@@ -550,12 +839,15 @@ ${getSchedulePrompt({ date: new Date() })}`,
   async executeTask(description: string, _task: Schedule<string>) {
     console.log(`Executing scheduled task: ${description}`);
 
+    // Log the task execution
+    await this.logActivity("task_execute", "Scheduled task ran", description);
+
     this.broadcast(
       JSON.stringify({
         type: "scheduled-task",
         description,
-        timestamp: new Date().toISOString(),
-      }),
+        timestamp: new Date().toISOString()
+      })
     );
   }
 }
@@ -576,15 +868,23 @@ export default {
               "queryWiki",
               "lintWiki",
               "getWikiStats",
+              "getActivityLog",
+              "getAgentStatus"
             ],
-            timestamp: new Date().toISOString(),
+            agentFeatures: [
+              "Activity feed with real-time updates",
+              "Agent status and presence",
+              "Scheduled task tracking",
+              "Persistent activity logging"
+            ],
+            timestamp: new Date().toISOString()
           },
           null,
-          2,
+          2
         ),
         {
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
 
@@ -592,5 +892,5 @@ export default {
       (await routeAgentRequest(request, env)) ||
       new Response("Not found", { status: 404 })
     );
-  },
+  }
 } satisfies ExportedHandler<Env>;

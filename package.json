@@ -2,15 +2,15 @@
   "name": "personal-agentic-wiki",
   "version": "1.0.0",
   "private": true,
-  "description": "Personal agentic wiki with hybrid AI search - ingest documents, search with vector/keyword/hybrid retrieval",
+  "description": "Personal wiki agent with hybrid AI search - ingest documents, search with vector/keyword/hybrid retrieval",
   "keywords": [
     "agents",
     "ai",
     "cloudflare",
-    "wiki",
-    "search",
+    "hybrid-search",
     "knowledge-base",
-    "hybrid-search"
+    "search",
+    "wiki"
   ],
   "license": "MIT",
   "type": "module",

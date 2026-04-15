@@ -1,4 +1,4 @@
-# Personal Agentic Wiki
+# Personal Wiki Agent
 
 A personal knowledge base powered by AI with hybrid search capabilities. Built with Cloudflare Workers, AI Search, and the Agents SDK.
 
@@ -118,7 +118,7 @@ Edit `server.ts`:
 
 ```ts
 const result = streamText({
-  model: workersai("@cf/meta/llama-3.3-70b-instruct"),
+  model: workersai("@cf/meta/llama-3.3-70b-instruct")
   // ...
 });
 ```
@@ -135,13 +135,13 @@ return instance.search({
       retrieval_type: "hybrid",
       fusion_method: "rrf",
       match_threshold: 0.4, // Adjust relevance threshold
-      max_num_results: 10, // Adjust result count
+      max_num_results: 10 // Adjust result count
     },
     reranking: {
       enabled: true,
-      model: "@cf/baai/bge-reranker-base",
-    },
-  },
+      model: "@cf/baai/bge-reranker-base"
+    }
+  }
 });
 ```
 
@@ -156,7 +156,7 @@ docType: z.enum([
   "note",
   "goal",
   "health",
-  "recipe", // Add your custom type
+  "recipe" // Add your custom type
 ]);
 ```
 
