@@ -33,6 +33,8 @@ interface Attachment {
   file: File;
   preview: string;
   mediaType: string;
+  fileType?: "image" | "document";
+  content?: string;
 }
 
 interface SearchResult {
@@ -46,12 +48,48 @@ interface SearchResult {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function createAttachment(file: File): Attachment {
+interface DocumentAttachment extends Attachment {
+  content?: string;
+  fileType: "image" | "document";
+}
+
+function isDocumentFile(file: File): boolean {
+  const documentTypes = [
+    "text/markdown",
+    "text/plain",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.oasis.opendocument.text"
+  ];
+  const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
+  const extension = "." + file.name.split(".").pop()?.toLowerCase();
+  return (
+    documentTypes.includes(file.type) || documentExtensions.includes(extension)
+  );
+}
+
+function getDocumentType(file: File): string {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const typeMap: Record<string, string> = {
+    md: "markdown",
+    txt: "text",
+    pdf: "pdf",
+    doc: "word",
+    docx: "word",
+    odt: "odt"
+  };
+  return typeMap[extension || ""] || "document";
+}
+
+function createAttachment(file: File): DocumentAttachment {
+  const isImage = file.type.startsWith("image/");
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     file,
-    preview: URL.createObjectURL(file),
-    mediaType: file.type || "application/octet-stream"
+    preview: isImage ? URL.createObjectURL(file) : "",
+    mediaType: file.type || "application/octet-stream",
+    fileType: isImage ? "image" : "document"
   };
 }
 
@@ -281,11 +319,62 @@ function Chat() {
   }, [isStreaming]);
 
   // Handlers
-  const addFiles = useCallback((files: FileList | File[]) => {
-    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) return;
-    setAttachments((prev) => [...prev, ...images.map(createAttachment)]);
+  const readFileAsText = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
   }, []);
+
+  const addFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const validFiles = Array.from(files).filter(
+        (f) => f.type.startsWith("image/") || isDocumentFile(f)
+      );
+      if (validFiles.length === 0) {
+        toasts.add({
+          title: "Invalid file type",
+          description:
+            "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
+          timeout: 5000
+        });
+        return;
+      }
+
+      const newAttachments: Attachment[] = [];
+
+      for (const file of validFiles) {
+        const attachment = createAttachment(file);
+
+        // For documents, read the content
+        if (
+          attachment.fileType === "document" &&
+          file.type.startsWith("text/")
+        ) {
+          try {
+            attachment.content = await readFileAsText(file);
+          } catch (error) {
+            console.error("Failed to read document:", error);
+          }
+        }
+
+        newAttachments.push(attachment);
+      }
+
+      setAttachments((prev) => [...prev, ...newAttachments]);
+
+      if (validFiles.length > 0) {
+        toasts.add({
+          title: "Files added",
+          description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
+          timeout: 3000
+        });
+      }
+    },
+    [readFileAsText, toasts]
+  );
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => {
@@ -322,23 +411,76 @@ function Chat() {
     if ((!text && attachments.length === 0) || isStreaming) return;
     setInput("");
 
+    // Build the message content
+    let messageText = text;
+
+    // Process attachments
+    const imageParts: Array<{ type: "file"; mediaType: string; url: string }> =
+      [];
+    const textDocuments: Attachment[] = [];
+
+    for (const att of attachments) {
+      if (att.fileType === "image") {
+        // Handle images as before
+        const dataUri = await fileToDataUri(att.file);
+        imageParts.push({
+          type: "file",
+          mediaType: att.mediaType,
+          url: dataUri
+        });
+      } else if (att.fileType === "document") {
+        // For text-based documents, ingest directly via RPC first
+        if (att.content) {
+          textDocuments.push(att);
+        } else {
+          // Binary documents - just mention them in the message
+          const docType = getDocumentType(att.file);
+          messageText += messageText ? "\n\n" : "";
+          messageText += `---\n**Document: ${att.file.name}** (Type: ${docType})\n\nNote: Binary document uploaded for indexing.\n---`;
+        }
+      }
+    }
+
+    // Ingest text documents directly via RPC
+    for (const doc of textDocuments) {
+      try {
+        const result = await agent.stub.ingestFile(
+          doc.file.name,
+          doc.content || "",
+          doc.file.type || "text/plain",
+          "note"
+        );
+
+        if (result.success) {
+          messageText += messageText ? "\n\n" : "";
+          messageText += `---\n**Document ingested: ${doc.file.name}**\nThe document has been indexed and is now searchable.\n---`;
+        } else {
+          messageText += messageText ? "\n\n" : "";
+          messageText += `---\n**Document: ${doc.file.name}**\nFailed to ingest: ${result.error || "Unknown error"}\n---`;
+        }
+      } catch (error) {
+        console.error("Failed to ingest file:", error);
+        messageText += messageText ? "\n\n" : "";
+        messageText += `---\n**Document: ${doc.file.name}**\nNote: ${doc.content || "Content not available"}\n---`;
+      }
+    }
+
     const parts: Array<
       | { type: "text"; text: string }
       | { type: "file"; mediaType: string; url: string }
     > = [];
-    if (text) parts.push({ type: "text", text });
+
+    if (messageText) parts.push({ type: "text", text: messageText });
+    parts.push(...imageParts);
 
     for (const att of attachments) {
-      const dataUri = await fileToDataUri(att.file);
-      parts.push({ type: "file", mediaType: att.mediaType, url: dataUri });
+      if (att.preview) URL.revokeObjectURL(att.preview);
     }
-
-    for (const att of attachments) URL.revokeObjectURL(att.preview);
     setAttachments([]);
 
     sendMessage({ role: "user", parts });
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-  }, [input, attachments, isStreaming, sendMessage]);
+  }, [input, attachments, isStreaming, sendMessage, agent]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !connected) return;
@@ -385,11 +527,24 @@ function Chat() {
       {isDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-warm-gray-800)]/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-12 shadow-2xl flex flex-col items-center gap-4 animate-fade-in">
-            <ImageIcon
-              size={48}
-              className="text-[var(--color-warm-gray-400)]"
-            />
-            <span className="text-xl font-medium">Drop images here</span>
+            <div className="flex items-center gap-3">
+              <ImageIcon
+                size={48}
+                className="text-[var(--color-warm-gray-400)]"
+              />
+              <span className="text-3xl text-[var(--color-warm-gray-400)]">
+                +
+              </span>
+              <PaperclipIcon
+                size={48}
+                className="text-[var(--color-warm-gray-400)]"
+              />
+            </div>
+            <span className="text-xl font-medium">Drop files here</span>
+            <p className="text-sm text-[var(--color-warm-gray-500)]">
+              Images (.jpg, .png, .gif) or Documents (.md, .pdf, .doc, .docx,
+              .txt)
+            </p>
           </div>
         </div>
       )}
@@ -642,14 +797,31 @@ function Chat() {
                         key={att.id}
                         className="relative group flex-shrink-0"
                       >
-                        <img
-                          src={att.preview}
-                          alt={att.file.name}
-                          className="h-14 w-14 object-cover rounded-lg"
-                        />
+                        {att.fileType === "image" ? (
+                          <img
+                            src={att.preview}
+                            alt={att.file.name}
+                            className="h-14 w-14 object-cover rounded-lg"
+                          />
+                        ) : (
+                          <div className="h-14 w-14 flex flex-col items-center justify-center bg-[var(--color-warm-gray-100)] rounded-lg border border-[var(--color-warm-gray-200)]">
+                            <PaperclipIcon
+                              size={20}
+                              className="text-[var(--color-warm-gray-500)]"
+                            />
+                            <span className="text-[8px] text-[var(--color-warm-gray-500)] mt-1 uppercase font-medium">
+                              {getDocumentType(att.file)}
+                            </span>
+                          </div>
+                        )}
+                        <span className="absolute -bottom-4 left-0 right-0 text-[10px] text-center text-[var(--color-warm-gray-500)] truncate max-w-[56px]">
+                          {att.file.name.length > 8
+                            ? att.file.name.slice(0, 6) + ".."
+                            : att.file.name}
+                        </span>
                         <button
                           onClick={() => removeAttachment(att.id)}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[var(--color-warm-gray-800)] text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[var(--color-warm-gray-800)] text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                         >
                           <XIcon size={12} />
                         </button>
@@ -671,7 +843,7 @@ function Chat() {
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept="image/*"
+                    accept="image/*,.md,.txt,.pdf,.doc,.docx,.odt"
                     className="hidden"
                     onChange={(e) => e.target.files && addFiles(e.target.files)}
                   />

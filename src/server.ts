@@ -189,6 +189,17 @@ export class ChatAgent extends AIChatAgent<Env> {
   private initialized = false;
   private activityBuffer: Activity[] = [];
 
+  // Wrap methods with error handling to prevent crashes
+  private safeExecute<T>(
+    operation: string,
+    fn: () => Promise<T>
+  ): Promise<T | { error: string }> {
+    return fn().catch((error) => {
+      console.error(`[Agent] Error in ${operation}:`, error);
+      return { error: `${operation} failed: ${error}` };
+    });
+  }
+
   async onStart() {
     // Configure OAuth popup behavior for MCP servers that require authentication
     this.mcp.configureOAuthCallback({
@@ -373,11 +384,14 @@ export class ChatAgent extends AIChatAgent<Env> {
         hybrid: info.index_method
       });
 
-      this.initialized = true;
       await this.createDefaultWikiStructure();
+
+      this.initialized = true;
       console.log(`[Wiki] Wiki initialized successfully`);
     } catch (error) {
       console.error("[Wiki] Failed to connect to instance:", error);
+      this.initialized = false;
+      this.instance = null;
     }
   }
 
@@ -486,6 +500,58 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         byCategory
       }
     };
+  }
+
+  // Ingest a file uploaded from the client
+  @callable()
+  async ingestFile(
+    fileName: string,
+    content: string,
+    contentType: string,
+    docType: "journal" | "article" | "note" | "goal" | "health" = "note"
+  ) {
+    if (!this.instance) {
+      return { error: "Wiki not initialized" };
+    }
+
+    try {
+      const now = Date.now();
+      const docId = `${docType}-${now}-${fileName}`;
+
+      const metadata: Record<string, string> = {
+        category: docType,
+        title: fileName,
+        originalName: fileName,
+        contentType: contentType,
+        createdAt: String(now),
+        source: "file_upload"
+      };
+
+      await uploadDocument(this.instance, docId, content, metadata);
+      await this.updateLog(
+        "ingest",
+        fileName,
+        `Uploaded and indexed file as ${docType}`,
+        {
+          docId,
+          docType,
+          contentType
+        }
+      );
+
+      return {
+        success: true,
+        message: `Successfully ingested "${fileName}" as ${docType}. Document ID: ${docId}`,
+        docId,
+        searchable: true,
+        method: "hybrid (vector + keyword with RRF fusion)"
+      };
+    } catch (error) {
+      return {
+        error: "Failed to upload document",
+        details: String(error)
+      };
+    }
   }
 
   // Get recent activities for the activity feed
@@ -628,6 +694,15 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
 ### 1. Ingest Documents
 When users share content (journal entries, articles, notes, goals, health data), use the ingestDocument tool to add it to their wiki. This indexes the content with hybrid search (vector + keyword).
 
+When a user uploads a document file (markdown, text, PDF, Word, etc.), they may include the content in their message with a format like:
+---
+**Document: filename.md**
+
+[content here]
+---
+
+If you see this pattern, extract the filename and content, then use the ingestDocument tool to index it. For binary files (PDF, DOC, DOCX) that don't have extractable text, ask the user to provide a summary or key content to ingest.
+
 ### 2. Search the Wiki
 When users ask questions, use queryWiki to search their knowledge base. This uses hybrid retrieval by default, combining:
 - **Vector search**: Semantic similarity (conceptually related content)
@@ -652,6 +727,11 @@ When ingesting:
 - Confirm what was saved
 - Mention it's now searchable with hybrid retrieval
 - Suggest related topics to explore
+
+When a user uploads a binary document (PDF, DOC, DOCX):
+- Acknowledge receipt of the file
+- Explain that text extraction happens on the server for searchability
+- Ask if they'd like you to process/index specific content from it
 
 ## Special Commands
 Users can also use:
