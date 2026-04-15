@@ -21,21 +21,36 @@ async function searchWiki(
     maxResults?: number;
   } = {}
 ) {
-  return instance.search({
-    messages: [{ role: "user", content: query }],
-    ai_search_options: {
-      retrieval: {
-        retrieval_type: options.retrievalType || "hybrid",
-        fusion_method: "rrf",
-        match_threshold: 0.4,
-        max_num_results: options.maxResults || 10
-      },
-      reranking: {
-        enabled: true,
-        model: "@cf/baai/bge-reranker-base"
+  console.log("[searchWiki] Searching for:", query);
+  console.log("[searchWiki] Options:", options);
+
+  try {
+    const result = await instance.search({
+      messages: [{ role: "user", content: query }],
+      ai_search_options: {
+        retrieval: {
+          retrieval_type: options.retrievalType || "hybrid",
+          fusion_method: "rrf",
+          match_threshold: 0.4,
+          max_num_results: options.maxResults || 10
+        },
+        reranking: {
+          enabled: true,
+          model: "@cf/baai/bge-reranker-base"
+        }
       }
-    }
-  });
+    });
+
+    console.log(
+      "[searchWiki] Search successful, found",
+      result.chunks?.length || 0,
+      "chunks"
+    );
+    return result;
+  } catch (error) {
+    console.error("[searchWiki] Search failed:", error);
+    throw error;
+  }
 }
 
 async function uploadDocument(
@@ -53,9 +68,49 @@ async function uploadDocument(
   }
   stringMetadata.uploaded_at = String(Date.now());
 
-  return instance.items.upload(key, content, {
-    metadata: stringMetadata
-  });
+  console.log("[uploadDocument] Starting upload for:", key);
+  console.log("[uploadDocument] Content length:", content.length);
+
+  try {
+    // Try uploadAndPoll first for immediate searchability
+    const result = await instance.items.uploadAndPoll(key, content, {
+      metadata: stringMetadata,
+      timeoutMs: 60000
+    } as AiSearchUploadItemOptions);
+    console.log(
+      "[uploadDocument] uploadAndPoll SUCCESS:",
+      key,
+      "Status:",
+      result.status
+    );
+    return result;
+  } catch (pollError) {
+    // If uploadAndPoll fails with item_not_found, fallback to regular upload
+    const errorMessage = String(pollError);
+    console.warn("[uploadDocument] uploadAndPoll failed:", errorMessage);
+
+    if (errorMessage.includes("item_not_found")) {
+      console.log("[uploadDocument] Falling back to regular upload():", key);
+      try {
+        const result = await instance.items.upload(key, content, {
+          metadata: stringMetadata
+        });
+        console.log("[uploadDocument] Regular upload SUCCESS:", key);
+        // Wait a bit for indexing to start
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return { ...result, status: "queued" };
+      } catch (uploadError) {
+        console.error(
+          "[uploadDocument] Regular upload also failed:",
+          uploadError
+        );
+        throw uploadError;
+      }
+    }
+
+    // If it's a different error, throw it
+    throw pollError;
+  }
 }
 
 async function listDocuments(instance: AiSearchInstance) {
