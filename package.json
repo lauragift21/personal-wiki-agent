@@ -1,12 +1,16 @@
 {
-  "name": "agent-starter",
+  "name": "personal-agentic-wiki",
   "version": "1.0.0",
   "private": true,
-  "description": "Starter template for building AI chat agents on Cloudflare",
+  "description": "Personal agentic wiki with hybrid AI search - ingest documents, search with vector/keyword/hybrid retrieval",
   "keywords": [
     "agents",
     "ai",
-    "cloudflare"
+    "cloudflare",
+    "wiki",
+    "search",
+    "knowledge-base",
+    "hybrid-search"
   ],
   "license": "MIT",
   "type": "module",

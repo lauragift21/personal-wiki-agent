@@ -11,7 +11,7 @@ import {
   InputArea,
   Surface,
   Switch,
-  Text
+  Text,
 } from "@cloudflare/kumo";
 import { Toasty, useKumoToastManager } from "@cloudflare/kumo/components/toast";
 import { Streamdown } from "streamdown";
@@ -36,7 +36,7 @@ import {
   XIcon,
   WrenchIcon,
   PaperclipIcon,
-  ImageIcon
+  ImageIcon,
 } from "@phosphor-icons/react";
 
 // ── Attachment helpers ────────────────────────────────────────────────
@@ -53,7 +53,7 @@ function createAttachment(file: File): Attachment {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     file,
     preview: URL.createObjectURL(file),
-    mediaType: file.type || "application/octet-stream"
+    mediaType: file.type || "application/octet-stream",
   };
 }
 
@@ -70,7 +70,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark"
+    () => document.documentElement.getAttribute("data-mode") === "dark",
   );
 
   const toggle = useCallback(() => {
@@ -97,7 +97,7 @@ function ThemeToggle() {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse
+  addToolApprovalResponse,
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -234,7 +234,7 @@ function Chat() {
     prompts: [],
     resources: [],
     servers: {},
-    tools: []
+    tools: [],
   });
   const [showMcpPanel, setShowMcpPanel] = useState(false);
   const [mcpName, setMcpName] = useState("");
@@ -248,7 +248,7 @@ function Chat() {
     onClose: useCallback(() => setConnected(false), []),
     onError: useCallback(
       (error: Event) => console.error("WebSocket error:", error),
-      []
+      [],
     ),
     onMcpUpdate: useCallback((state: MCPServersState) => {
       setMcpState(state);
@@ -261,15 +261,15 @@ function Chat() {
             toasts.add({
               title: "Scheduled task completed",
               description: data.description,
-              timeout: 0
+              timeout: 0,
             });
           }
         } catch {
           // Not JSON or not our event
         }
       },
-      [toasts]
-    )
+      [toasts],
+    ),
   });
 
   // Close MCP panel when clicking outside
@@ -318,7 +318,7 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status
+    status,
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -330,11 +330,11 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString()
-          }
+            localTime: new Date().toLocaleTimeString(),
+          },
         });
       }
-    }
+    },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -383,7 +383,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles],
   );
 
   const handlePaste = useCallback(
@@ -402,7 +402,7 @@ function Chat() {
         addFiles(files);
       }
     },
-    [addFiles]
+    [addFiles],
   );
 
   const send = useCallback(async () => {
@@ -449,7 +449,7 @@ function Chat() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold text-kumo-default">
-              <span className="mr-2">⛅</span>Agent Starter
+              <span className="mr-2">📚</span>Personal Agentic Wiki
             </h1>
             <Badge variant="secondary">
               <ChatCircleDotsIcon size={12} weight="bold" className="mr-1" />
@@ -604,7 +604,7 @@ function Chat() {
                                       window.open(
                                         server.auth_url as string,
                                         "oauth",
-                                        "width=600,height=800"
+                                        "width=600,height=800",
                                       )
                                     }
                                   >
@@ -663,10 +663,10 @@ function Chat() {
               contents={
                 <div className="flex flex-wrap justify-center gap-2">
                   {[
-                    "What's the weather in Paris?",
-                    "What timezone am I in?",
-                    "Calculate 5000 * 3",
-                    "Remind me in 5 minutes to take a break"
+                    "Add a journal entry about my day",
+                    "Search my wiki for machine learning notes",
+                    "Ingest this article about AI",
+                    "What did I write about last week?",
                   ].map((prompt) => (
                     <Button
                       key={prompt}
@@ -676,7 +676,7 @@ function Chat() {
                       onClick={() => {
                         sendMessage({
                           role: "user",
-                          parts: [{ type: "text", text: prompt }]
+                          parts: [{ type: "text", text: prompt }],
                         });
                       }}
                     >
@@ -715,7 +715,7 @@ function Chat() {
                   .filter(
                     (part) =>
                       part.type === "reasoning" &&
-                      (part as { text?: string }).text?.trim()
+                      (part as { text?: string }).text?.trim(),
                   )
                   .map((part, i) => {
                     const reasoning = part as {
@@ -760,8 +760,8 @@ function Chat() {
                     (part): part is Extract<typeof part, { type: "file" }> =>
                       part.type === "file" &&
                       (part as { mediaType?: string }).mediaType?.startsWith(
-                        "image/"
-                      ) === true
+                        "image/",
+                      ) === true,
                   )
                   .map((part, i) => (
                     <div
