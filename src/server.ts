@@ -564,19 +564,41 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`
       );
 
+      console.log("[Server queryWiki] Processing chunks...");
+      const results = searchResults.chunks.map((chunk, index) => {
+        try {
+          return {
+            id: chunk.id,
+            text: chunk.text,
+            source: chunk.item?.key || "unknown",
+            overallScore: chunk.score,
+            vectorScore: chunk.scoring_details?.vector_score || 0,
+            keywordScore: chunk.scoring_details?.keyword_score || 0,
+            fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
+          };
+        } catch (chunkError) {
+          console.error(
+            `[Server queryWiki] Error processing chunk ${index}:`,
+            chunkError
+          );
+          return {
+            id: chunk.id || `chunk-${index}`,
+            text: chunk.text || "",
+            source: "error",
+            overallScore: chunk.score || 0,
+            vectorScore: 0,
+            keywordScore: 0,
+            fusionMethod: "rrf"
+          };
+        }
+      });
+      console.log("[Server queryWiki] Processed", results.length, "chunks");
+
       const response = {
         query: searchResults.search_query,
         method: retrievalType,
-        totalResults: searchResults.chunks.length,
-        results: searchResults.chunks.map((chunk) => ({
-          id: chunk.id,
-          text: chunk.text,
-          source: chunk.item.key,
-          overallScore: chunk.score,
-          vectorScore: chunk.scoring_details?.vector_score || 0,
-          keywordScore: chunk.scoring_details?.keyword_score || 0,
-          fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
-        }))
+        totalResults: results.length,
+        results
       };
 
       console.log(
