@@ -449,23 +449,33 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     details: string,
     metadata?: Record<string, unknown>
   ) {
-    // Log to SQLite for real-time feed
-    await this.logActivity(operation, subject, details, metadata);
+    try {
+      // Log to SQLite for real-time feed
+      await this.logActivity(operation, subject, details, metadata);
 
-    // Also update markdown log if instance available
-    if (!this.instance) return;
+      // Also update markdown log if instance available
+      if (!this.instance) return;
 
-    const existingLog = await getDocument(this.instance, "log.md");
-    const entry = `\n## [${new Date().toISOString()}] ${operation} | ${subject}\n- ${details}\n`;
+      try {
+        const existingLog = await getDocument(this.instance, "log.md");
+        const entry = `\n## [${new Date().toISOString()}] ${operation} | ${subject}\n- ${details}\n`;
 
-    const newLog = existingLog
-      ? existingLog + entry
-      : `# Wiki Activity Log\n${entry}`;
+        const newLog = existingLog
+          ? existingLog + entry
+          : `# Wiki Activity Log\n${entry}`;
 
-    await uploadDocument(this.instance, "log.md", newLog, {
-      category: "log",
-      title: "Activity Log"
-    });
+        await uploadDocument(this.instance, "log.md", newLog, {
+          category: "log",
+          title: "Activity Log"
+        });
+      } catch (logError) {
+        // Markdown log update failed but SQLite succeeded - don't crash
+        console.warn("[updateLog] Markdown log update failed:", logError);
+      }
+    } catch (error) {
+      console.error("[updateLog] Critical error:", error);
+      // Don't throw - this is just logging
+    }
   }
 
   @callable()
