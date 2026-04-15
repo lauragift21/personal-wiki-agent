@@ -2,7 +2,7 @@
 
 A personal knowledge base powered by AI with hybrid search capabilities. Built with Cloudflare Workers, AI Search, and the Agents SDK.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/giftegwuenu/personal-agentic-wiki)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lauragift21/personal-agentic-wiki)
 
 ## Features
 
@@ -32,8 +32,6 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) to see your wiki.
-
-> **Note:** AI Search requires deployment to work. Local development runs without the search backend.
 
 ## Deploy
 
