@@ -14,6 +14,13 @@
 		"binding": "AI",
 		"remote": true
 	},
+	"ai_search_namespaces": [
+		{
+			"binding": "AI_SEARCH",
+			"namespace": "default",
+			"remote": true
+		}
+	],
 	"assets": {
 		"directory": "./public",
 		"not_found_handling": "single-page-application",
