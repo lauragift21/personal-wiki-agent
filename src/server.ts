@@ -53,8 +53,7 @@ async function uploadDocument(
   }
   stringMetadata.uploaded_at = String(Date.now());
 
-  // Use uploadAndPoll to ensure document is fully processed before returning
-  return instance.items.uploadAndPoll(key, content, {
+  return instance.items.upload(key, content, {
     metadata: stringMetadata
   });
 }
@@ -466,6 +465,75 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         : null,
       scheduledTasks: this.getSchedules().length
     };
+  }
+
+  // Search the wiki - callable from client
+  @callable()
+  async queryWiki(
+    query: string,
+    retrievalType: "vector" | "keyword" | "hybrid" = "hybrid",
+    maxResults: number = 5
+  ) {
+    console.log("[Server queryWiki] Called with:", {
+      query,
+      retrievalType,
+      maxResults
+    });
+    console.log("[Server queryWiki] Instance available:", !!this.instance);
+    console.log("[Server queryWiki] Initialized:", this.initialized);
+
+    if (!this.instance) {
+      console.error("[Server queryWiki] ERROR: Wiki not initialized");
+      return { error: "Wiki not initialized" };
+    }
+
+    try {
+      const searchResults = await searchWiki(this.instance, query, {
+        retrievalType,
+        maxResults
+      });
+
+      console.log(
+        "[Server queryWiki] Search completed, found:",
+        searchResults.chunks.length,
+        "chunks"
+      );
+      console.log(
+        "[Server queryWiki] Search query used:",
+        searchResults.search_query
+      );
+
+      await this.updateLog(
+        "query",
+        query,
+        `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`
+      );
+
+      const response = {
+        query: searchResults.search_query,
+        method: retrievalType,
+        totalResults: searchResults.chunks.length,
+        results: searchResults.chunks.map((chunk) => ({
+          id: chunk.id,
+          text: chunk.text,
+          source: chunk.item.key,
+          overallScore: chunk.score,
+          vectorScore: chunk.scoring_details?.vector_score || 0,
+          keywordScore: chunk.scoring_details?.keyword_score || 0,
+          fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
+        }))
+      };
+
+      console.log(
+        "[Server queryWiki] Returning response with",
+        response.results.length,
+        "results"
+      );
+      return response;
+    } catch (error) {
+      console.error("[Server queryWiki] ERROR during search:", error);
+      return { error: String(error), results: [], totalResults: 0 };
+    }
   }
 
   async onChatMessage(_onFinish: unknown, options?: OnChatMessageOptions) {
