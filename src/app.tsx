@@ -834,7 +834,7 @@ function Chat() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={!connected || isStreaming}
-                    className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors"
+                    className="p-3 mb-0.5 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors self-end"
                   >
                     <PaperclipIcon size={20} />
                   </button>
