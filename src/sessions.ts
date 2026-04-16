@@ -24,17 +24,20 @@ export interface ChatSessionWithMessages extends ChatSession {
 }
 
 /**
- * Type for the sql tagged template function from Agent class
- * The actual type is more complex, so we use a flexible type here
+ * Agent interface with sql method - pass the agent instance to maintain 'this' binding
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SqlFunction = (strings: TemplateStringsArray, ...values: any[]) => any[];
+interface AgentWithSql {
+  sql: (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => Array<Record<string, unknown>>;
+}
 
 /**
  * Create the sessions table if it doesn't exist
  */
-export function initializeSessionsTable(sql: SqlFunction) {
-  sql`
+export function initializeSessionsTable(agent: AgentWithSql) {
+  agent.sql`
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -45,12 +48,12 @@ export function initializeSessionsTable(sql: SqlFunction) {
     )
   `;
 
-  sql`
+  agent.sql`
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_message 
     ON chat_sessions(last_message_at DESC)
   `;
 
-  sql`
+  agent.sql`
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_created 
     ON chat_sessions(created_at DESC)
   `;
@@ -60,10 +63,10 @@ export function initializeSessionsTable(sql: SqlFunction) {
  * List all chat sessions, ordered by most recent message
  */
 export function listSessions(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   limit: number = 50
 ): ChatSession[] {
-  const results = sql`
+  const results = agent.sql`
     SELECT 
       id,
       name,
@@ -90,10 +93,10 @@ export function listSessions(
  * Get a single session by ID
  */
 export function getSession(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   sessionId: string
 ): ChatSession | null {
-  const results = sql`
+  const results = agent.sql`
     SELECT 
       id,
       name,
@@ -123,7 +126,7 @@ export function getSession(
  * Create a new chat session
  */
 export function createSession(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   name: string,
   sessionId?: string
 ): ChatSession {
@@ -131,7 +134,7 @@ export function createSession(
   const id =
     sessionId || `session-${now}-${Math.random().toString(36).slice(2, 8)}`;
 
-  sql`
+  agent.sql`
     INSERT INTO chat_sessions (id, name, created_at, last_message_at, message_count, preview)
     VALUES (${id}, ${name}, ${now}, ${now}, 0, ${null})
   `;
@@ -149,7 +152,7 @@ export function createSession(
  * Update session metadata after a new message
  */
 export function updateSessionAfterMessage(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   sessionId: string,
   messagePreview: string
 ) {
@@ -161,7 +164,7 @@ export function updateSessionAfterMessage(
       ? messagePreview.slice(0, 97) + "..."
       : messagePreview;
 
-  sql`
+  agent.sql`
     UPDATE chat_sessions
     SET 
       last_message_at = ${now},
@@ -175,11 +178,11 @@ export function updateSessionAfterMessage(
  * Rename a session
  */
 export function renameSession(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   sessionId: string,
   newName: string
 ): boolean {
-  const results = sql`
+  const results = agent.sql`
     UPDATE chat_sessions
     SET name = ${newName}
     WHERE id = ${sessionId}
@@ -192,8 +195,8 @@ export function renameSession(
 /**
  * Delete a session
  */
-export function deleteSession(sql: SqlFunction, sessionId: string): boolean {
-  const results = sql`
+export function deleteSession(agent: AgentWithSql, sessionId: string): boolean {
+  const results = agent.sql`
     DELETE FROM chat_sessions
     WHERE id = ${sessionId}
     RETURNING id
@@ -206,13 +209,13 @@ export function deleteSession(sql: SqlFunction, sessionId: string): boolean {
  * Search across session names and previews
  */
 export function searchSessions(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   query: string,
   limit: number = 20
 ): ChatSession[] {
   const searchPattern = `%${query}%`;
 
-  const results = sql`
+  const results = agent.sql`
     SELECT 
       id,
       name,
@@ -239,8 +242,8 @@ export function searchSessions(
 /**
  * Get total count of sessions
  */
-export function getSessionCount(sql: SqlFunction): number {
-  const results = sql`SELECT COUNT(*) as count FROM chat_sessions`;
+export function getSessionCount(agent: AgentWithSql): number {
+  const results = agent.sql`SELECT COUNT(*) as count FROM chat_sessions`;
   return (results[0]?.count as number) || 0;
 }
 
@@ -248,10 +251,10 @@ export function getSessionCount(sql: SqlFunction): number {
  * Clean up old sessions, keeping only the most recent N
  */
 export function cleanupOldSessions(
-  sql: SqlFunction,
+  agent: AgentWithSql,
   keepCount: number = 100
 ): number {
-  const results = sql`
+  const results = agent.sql`
     DELETE FROM chat_sessions
     WHERE id NOT IN (
       SELECT id FROM chat_sessions

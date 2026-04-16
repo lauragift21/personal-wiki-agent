@@ -28,7 +28,7 @@ function extractTitle(content: string): string | null {
 }
 
 // Check if content contains images
-function hasImages(content: string): boolean {
+function _hasImages(content: string): boolean {
   return /!\[.*?\]\(.*?\)/.test(content);
 }
 

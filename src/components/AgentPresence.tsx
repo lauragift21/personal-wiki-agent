@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Text, Badge } from "@cloudflare/kumo";
 import { RobotIcon, PulseIcon } from "@phosphor-icons/react";
 

@@ -1,11 +1,10 @@
 import { Suspense, useCallback, useState, useEffect, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
-import { useVoiceAgent } from "@cloudflare/voice/react";
+import { useVoiceInput } from "@cloudflare/voice/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
-import type { MCPServersState } from "agents";
 import type { ChatAgent } from "./server";
-import { Badge, Button, Switch } from "@cloudflare/kumo";
+import { Badge, Button } from "@cloudflare/kumo";
 import { Toasty, useKumoToastManager } from "@cloudflare/kumo/components/toast";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
@@ -19,18 +18,16 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   BrainIcon,
-  BugIcon,
   XIcon,
   PaperclipIcon,
   ImageIcon,
   MagnifyingGlassIcon,
   BooksIcon,
-  MicrophoneIcon,
-  PhoneSlashIcon,
-  PhoneIcon,
+  MicrophoneIcon
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
+import { ChatHistorySidebar } from "./components/ChatHistorySidebar";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -66,7 +63,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.text"
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -83,7 +80,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt",
+    odt: "odt"
   };
   return typeMap[extension || ""] || "document";
 }
@@ -95,7 +92,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document",
+    fileType: isImage ? "image" : "document"
   };
 }
 
@@ -112,7 +109,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark",
+    () => document.documentElement.getAttribute("data-mode") === "dark"
   );
 
   const toggle = useCallback(() => {
@@ -135,7 +132,7 @@ function ThemeToggle() {
   );
 }
 
-function ConnectionIndicator({ connected }: { connected: boolean }) {
+function _ConnectionIndicator({ connected }: { connected: boolean }) {
   return (
     <div className="flex items-center gap-2 text-sm text-[var(--color-warm-gray-500)]">
       <span className={`connection-status ${connected ? "" : "offline"}`} />
@@ -146,7 +143,7 @@ function ConnectionIndicator({ connected }: { connected: boolean }) {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse,
+  addToolApprovalResponse
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -232,7 +229,7 @@ function Chat() {
   // State
   const [connected, setConnected] = useState(false);
   const [input, setInput] = useState("");
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, _setShowDebug] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "search">("chat");
@@ -243,8 +240,9 @@ function Chat() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
-  // Voice state
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  // Sidebar and session state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -253,7 +251,8 @@ function Chat() {
   const toasts = useKumoToastManager();
 
   // Agent setup with reconnection
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [_reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [agentReady, setAgentReady] = useState(false);
 
   const agent = useAgent<ChatAgent>({
     agent: "ChatAgent",
@@ -261,10 +260,16 @@ function Chat() {
       console.log("[WebSocket] Connected");
       setConnected(true);
       setReconnectAttempt(0);
+      // Small delay to ensure stub is ready
+      setTimeout(() => {
+        console.log("[Agent] Stub available:", !!agent.stub);
+        setAgentReady(!!agent.stub);
+      }, 100);
     }, []),
     onClose: useCallback((event: CloseEvent) => {
       console.log("[WebSocket] Closed:", event.code, event.reason);
       setConnected(false);
+      setAgentReady(false);
     }, []),
     onError: useCallback((error: Event) => {
       console.error("[WebSocket] Error:", error);
@@ -279,13 +284,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000,
+              timeout: 5000
             });
           }
         } catch {}
       },
-      [toasts],
-    ),
+      [toasts]
+    )
   });
 
   // Chat hook
@@ -295,7 +300,7 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status,
+    status
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -307,51 +312,48 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString(),
-          },
+            localTime: new Date().toLocaleTimeString()
+          }
         });
       }
-    },
+    }
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  // Voice agent hook
+  // Voice input hook (speech-to-text only, no modal, no call)
   const {
-    status: voiceStatus,
     transcript: voiceTranscript,
     interimTranscript: voiceInterimTranscript,
+    isListening,
     audioLevel,
-    isMuted,
     error: voiceError,
-    startCall,
-    endCall,
-    toggleMute,
-  } = useVoiceAgent({
-    agent: "VoiceChatAgent",
+    start: startVoiceInput,
+    stop: stopVoiceInput
+  } = useVoiceInput({
+    agent: "VoiceChatAgent"
   });
 
-  // Start voice call
-  const handleStartVoiceCall = useCallback(async () => {
-    setShowVoiceModal(true);
-    try {
-      await startCall();
-    } catch (error) {
-      console.error("[Voice] Failed to start call:", error);
-      toasts.add({
-        title: "Voice call failed",
-        description:
-          "Could not start voice conversation. Please check microphone permissions.",
-        timeout: 5000,
+  // Update input when voice transcript changes
+  useEffect(() => {
+    if (voiceTranscript) {
+      setInput((prev) => {
+        const newValue = prev ? `${prev} ${voiceTranscript}` : voiceTranscript;
+        return newValue.trim();
       });
     }
-  }, [startCall, toasts]);
+  }, [voiceTranscript]);
 
-  // End voice call
-  const handleEndVoiceCall = useCallback(() => {
-    endCall();
-    setShowVoiceModal(false);
-  }, [endCall]);
+  // Show voice error toast
+  useEffect(() => {
+    if (voiceError) {
+      toasts.add({
+        title: "Voice input error",
+        description: voiceError,
+        timeout: 5000
+      });
+    }
+  }, [voiceError, toasts]);
 
   // Effects
   useEffect(() => {
@@ -363,6 +365,23 @@ function Chat() {
       textareaRef.current.focus();
     }
   }, [isStreaming]);
+
+  // Initialize first session when agent connects
+  useEffect(() => {
+    if (connected && agent.stub && !currentSessionId) {
+      const initSession = async () => {
+        try {
+          console.log("[Init] Creating initial session...");
+          const session = await agent.stub.createChatSession("New Chat");
+          console.log("[Init] Initial session created:", session);
+          setCurrentSessionId(session.id);
+        } catch (error) {
+          console.error("[Init] Failed to create initial session:", error);
+        }
+      };
+      initSession();
+    }
+  }, [connected, agent.stub, currentSessionId]);
 
   // Fetch search suggestions when search tab is opened
   useEffect(() => {
@@ -393,17 +412,101 @@ function Chat() {
     });
   }, []);
 
+  // Session management handlers
+  const handleNewChat = useCallback(async () => {
+    if (!connected || !agent.stub) {
+      console.error("[handleNewChat] Agent not connected", {
+        connected,
+        hasStub: !!agent.stub
+      });
+      toasts.add({
+        title: "Not connected",
+        description: "Please wait for connection...",
+        timeout: 3000
+      });
+      return;
+    }
+
+    try {
+      console.log("[handleNewChat] Creating new session...");
+      // Create a new session
+      const session = await agent.stub.createChatSession();
+      console.log("[handleNewChat] Session created:", session);
+      setCurrentSessionId(session.id);
+
+      // Clear current chat history
+      clearHistory();
+
+      // Switch to chat tab
+      setActiveTab("chat");
+
+      toasts.add({
+        title: "New chat started",
+        description: session.name,
+        timeout: 3000
+      });
+    } catch (error) {
+      console.error("[handleNewChat] Failed to create new session:", error);
+      toasts.add({
+        title: "Failed to start new chat",
+        description:
+          error instanceof Error ? error.message : "Please try again",
+        timeout: 3000
+      });
+    }
+  }, [agent, clearHistory, setActiveTab, toasts, connected]);
+
+  const handleSessionSelect = useCallback(
+    async (sessionId: string) => {
+      if (!connected || !agent.stub || sessionId === currentSessionId) {
+        console.error("[handleSessionSelect] Cannot switch", {
+          connected,
+          hasStub: !!agent.stub,
+          sessionId,
+          currentSessionId
+        });
+        return;
+      }
+
+      try {
+        console.log("[handleSessionSelect] Switching to session:", sessionId);
+        // Set the current session on the server
+        const session = await agent.stub.setCurrentSession(sessionId);
+        if (session) {
+          setCurrentSessionId(sessionId);
+          clearHistory();
+          setActiveTab("chat");
+
+          toasts.add({
+            title: "Switched to chat",
+            description: session.name,
+            timeout: 2000
+          });
+        }
+      } catch (error) {
+        console.error("[handleSessionSelect] Failed to switch session:", error);
+        toasts.add({
+          title: "Failed to switch chat",
+          description:
+            error instanceof Error ? error.message : "Please try again",
+          timeout: 3000
+        });
+      }
+    },
+    [agent, currentSessionId, clearHistory, setActiveTab, toasts, connected]
+  );
+
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f),
+        (f) => f.type.startsWith("image/") || isDocumentFile(f)
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000,
+          timeout: 5000
         });
         return;
       }
@@ -434,11 +537,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000,
+          timeout: 3000
         });
       }
     },
-    [readFileAsText, toasts],
+    [readFileAsText, toasts]
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -468,7 +571,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles],
+    [addFiles]
   );
 
   const send = useCallback(async () => {
@@ -491,7 +594,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri,
+          url: dataUri
         });
       } else if (att.fileType === "document") {
         // For text-based documents, ingest directly via RPC first
@@ -513,7 +616,7 @@ function Chat() {
           doc.file.name,
           doc.content || "",
           doc.file.type || "text/plain",
-          "note",
+          "note"
         );
 
         if (result.success) {
@@ -555,7 +658,7 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10,
+        10
       );
       setSearchResults(result.results || []);
 
@@ -576,210 +679,95 @@ function Chat() {
 
   return (
     <div
-      className="flex flex-col h-screen"
+      className="flex h-screen"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Voice Modal */}
-      {showVoiceModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--color-warm-gray-900)]/80 backdrop-blur-sm">
-          <div className="bg-[var(--bg-secondary)] rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4 animate-fade-in">
-            <div className="text-center">
-              {/* Status indicator */}
-              <div className="mb-6">
-                <div
-                  className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center transition-all duration-300 ${
-                    voiceStatus === "listening"
-                      ? "bg-blue-100 animate-pulse"
-                      : voiceStatus === "thinking"
-                        ? "bg-amber-100"
-                        : voiceStatus === "speaking"
-                          ? "bg-green-100"
-                          : "bg-[var(--color-warm-gray-100)]"
-                  }`}
-                >
-                  {voiceStatus === "listening" ? (
-                    <MicrophoneIcon size={32} className="text-blue-600" />
-                  ) : voiceStatus === "thinking" ? (
-                    <BrainIcon size={32} className="text-amber-600" />
-                  ) : voiceStatus === "speaking" ? (
-                    <div className="flex items-center gap-1">
-                      <span
-                        className="w-1 h-6 bg-green-600 rounded animate-pulse"
-                        style={{ animationDelay: "0ms" }}
-                      />
-                      <span
-                        className="w-1 h-8 bg-green-600 rounded animate-pulse"
-                        style={{ animationDelay: "150ms" }}
-                      />
-                      <span
-                        className="w-1 h-6 bg-green-600 rounded animate-pulse"
-                        style={{ animationDelay: "300ms" }}
-                      />
-                    </div>
-                  ) : (
-                    <PhoneIcon
-                      size={32}
-                      className="text-[var(--color-warm-gray-500)]"
-                    />
-                  )}
-                </div>
+      {/* Chat History Sidebar */}
+      <ChatHistorySidebar
+        agent={agent}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        currentSessionId={currentSessionId}
+        onSessionSelect={handleSessionSelect}
+        onNewChat={handleNewChat}
+        connected={connected}
+      />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Drag Overlay */}
+        {isDragging && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-warm-gray-800)]/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-12 shadow-2xl flex flex-col items-center gap-4 animate-fade-in">
+              <div className="flex items-center gap-3">
+                <ImageIcon
+                  size={48}
+                  className="text-[var(--color-warm-gray-400)]"
+                />
+                <span className="text-3xl text-[var(--color-warm-gray-400)]">
+                  +
+                </span>
+                <PaperclipIcon
+                  size={48}
+                  className="text-[var(--color-warm-gray-400)]"
+                />
               </div>
-
-              {/* Status text */}
-              <h3 className="text-xl font-semibold mb-2">
-                {voiceStatus === "idle" && "Starting call..."}
-                {voiceStatus === "listening" && "Listening..."}
-                {voiceStatus === "thinking" && "Thinking..."}
-                {voiceStatus === "speaking" && "Speaking..."}
-              </h3>
-
-              {/* Interim transcript */}
-              {voiceInterimTranscript && (
-                <p className="text-[var(--text-tertiary)] italic mb-4">
-                  &ldquo;{voiceInterimTranscript}&rdquo;
-                </p>
-              )}
-
-              {/* Audio level indicator */}
-              {voiceStatus === "listening" && (
-                <div className="flex justify-center gap-1 h-8 mb-6">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1 bg-blue-500 rounded-full transition-all duration-100"
-                      style={{
-                        height: `${Math.max(20, Math.min(100, (audioLevel || 0) * 100 + Math.random() * 30))}%`,
-                        opacity: 0.3 + (i / 20) * 0.7,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Conversation transcript */}
-              {voiceTranscript.length > 0 && (
-                <div className="text-left mb-6 max-h-48 overflow-y-auto p-4 bg-[var(--bg-tertiary)] rounded-lg">
-                  {voiceTranscript.slice(-5).map((msg, i) => (
-                    <div key={i} className="mb-2 last:mb-0">
-                      <span
-                        className={`text-xs font-medium ${
-                          msg.role === "user"
-                            ? "text-blue-600"
-                            : "text-green-600"
-                        }`}
-                      >
-                        {msg.role === "user" ? "You" : "Agent"}:
-                      </span>
-                      <p className="text-sm text-[var(--text-secondary)]">
-                        {msg.text}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Error display */}
-              {voiceError && (
-                <p className="text-red-500 text-sm mb-4">{voiceError}</p>
-              )}
-
-              {/* Controls */}
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={toggleMute}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isMuted
-                      ? "bg-red-100 text-red-600"
-                      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)]"
-                  }`}
-                >
-                  {isMuted ? "Unmute" : "Mute"}
-                </button>
-                <button
-                  onClick={handleEndVoiceCall}
-                  className="px-6 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors flex items-center gap-2"
-                >
-                  <PhoneSlashIcon size={18} />
-                  End Call
-                </button>
-              </div>
+              <span className="text-xl font-medium">Drop files here</span>
+              <p className="text-sm text-[var(--color-warm-gray-500)]">
+                Images (.jpg, .png, .gif) or Documents (.md, .pdf, .doc, .docx,
+                .txt)
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Drag Overlay */}
-      {isDragging && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-warm-gray-800)]/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-12 shadow-2xl flex flex-col items-center gap-4 animate-fade-in">
+        {/* Header */}
+        <header className="calm-header px-6 py-4">
+          <div className="max-w-3xl mx-auto flex items-center justify-between">
+            {/* Logo - Fixed width */}
+            <div className="flex items-center gap-3 w-[120px]">
+              <h1 className="text-xl font-semibold tracking-tight">
+                wiki-agent
+              </h1>
+            </div>
+
+            {/* Tabs - Prominent - Centered */}
+            <div className="flex items-center justify-center bg-[var(--bg-tertiary)] rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
+                  activeTab === "chat"
+                    ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                <ChatCircleDotsIcon
+                  size={18}
+                  weight={activeTab === "chat" ? "fill" : "regular"}
+                />
+                Chat
+              </button>
+              <button
+                onClick={() => setActiveTab("search")}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
+                  activeTab === "search"
+                    ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
+                    : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                <MagnifyingGlassIcon
+                  size={18}
+                  weight={activeTab === "search" ? "fill" : "regular"}
+                />
+                Search
+              </button>
+            </div>
+
+            {/* Controls */}
             <div className="flex items-center gap-3">
-              <ImageIcon
-                size={48}
-                className="text-[var(--color-warm-gray-400)]"
-              />
-              <span className="text-3xl text-[var(--color-warm-gray-400)]">
-                +
-              </span>
-              <PaperclipIcon
-                size={48}
-                className="text-[var(--color-warm-gray-400)]"
-              />
-            </div>
-            <span className="text-xl font-medium">Drop files here</span>
-            <p className="text-sm text-[var(--color-warm-gray-500)]">
-              Images (.jpg, .png, .gif) or Documents (.md, .pdf, .doc, .docx,
-              .txt)
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="calm-header px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          {/* Logo - Fixed width */}
-          <div className="flex items-center gap-3 w-[120px]">
-            <h1 className="text-xl font-semibold tracking-tight">wiki-agent</h1>
-          </div>
-
-          {/* Tabs - Prominent - Centered */}
-          <div className="flex items-center justify-center bg-[var(--bg-tertiary)] rounded-lg p-1">
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
-                activeTab === "chat"
-                  ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              <ChatCircleDotsIcon
-                size={18}
-                weight={activeTab === "chat" ? "fill" : "regular"}
-              />
-              Chat
-            </button>
-            <button
-              onClick={() => setActiveTab("search")}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
-                activeTab === "search"
-                  ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
-                  : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              <MagnifyingGlassIcon
-                size={18}
-                weight={activeTab === "search" ? "fill" : "regular"}
-              />
-              Search
-            </button>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center gap-3">
-            {/* <ConnectionIndicator connected={connected} /> */}
-            {/* <div className="flex items-center gap-2">
+              {/* <ConnectionIndicator connected={connected} /> */}
+              {/* <div className="flex items-center gap-2">
               <BugIcon
                 size={14}
                 className="text-[var(--color-warm-gray-400)]"
@@ -790,448 +778,495 @@ function Chat() {
                 size="sm"
               />
             </div> */}
-            <ThemeToggle />
-            <button
-              onClick={clearHistory}
-              className="p-2 rounded-lg hover:bg-[var(--color-warm-gray-100)] transition-colors"
-              title="Clear conversation"
-            >
-              <TrashIcon size={18} />
-            </button>
+              <ThemeToggle />
+              <button
+                onClick={clearHistory}
+                className="p-2 rounded-lg hover:bg-[var(--color-warm-gray-100)] transition-colors"
+                title="Clear conversation"
+              >
+                <TrashIcon size={18} />
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
-        {activeTab === "chat" ? (
-          <div className="h-full flex flex-col max-w-3xl mx-auto px-6">
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto py-6 space-y-6">
-              {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center max-w-md empty-calm">
-                    <BooksIcon size={48} className="mx-auto mb-4 opacity-50" />
-                    <h2 className="text-lg font-medium mb-2">
-                      Start a conversation
-                    </h2>
-                    <p className="text-sm mb-6">
-                      Ask questions about your wiki or add new knowledge.
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {[
-                        {
-                          text: "Search my wiki",
-                          description: "Find anything in your knowledge base",
-                        },
-                        {
-                          text: "Save a journal entry",
-                          description:
-                            "Record thoughts, reflections, or daily notes",
-                        },
-                        {
-                          text: "Upload and index a document",
-                          description: "Add files to make them searchable",
-                        },
-                      ].map((prompt) => (
-                        <button
-                          key={prompt.text}
-                          onClick={() =>
-                            sendMessage({
-                              role: "user",
-                              parts: [{ type: "text", text: prompt.text }],
-                            })
+        {/* Main Content */}
+        <main className="flex-1 overflow-hidden">
+          {activeTab === "chat" ? (
+            <div className="h-full flex flex-col max-w-3xl mx-auto px-6">
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto scrollbar-hide py-6 space-y-6">
+                {messages.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center max-w-md empty-calm">
+                      <BooksIcon
+                        size={48}
+                        className="mx-auto mb-4 opacity-50"
+                      />
+                      <h2 className="text-2xl font-medium mb-2">
+                        Start a conversation
+                      </h2>
+                      <p className="mb-6">
+                        Ask questions about your wiki or add new knowledge.
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {[
+                          {
+                            text: "Search my wiki",
+                            description: "Find anything in your knowledge base"
+                          },
+                          {
+                            text: "Save a journal entry",
+                            description:
+                              "Record thoughts, reflections, or daily notes"
+                          },
+                          {
+                            text: "Upload and index a document",
+                            description: "Add files to make them searchable"
                           }
-                          disabled={isStreaming}
-                          className="suggestion-pill px-4 py-2"
-                          title={prompt.description}
-                        >
-                          {prompt.text}
-                        </button>
-                      ))}
+                        ].map((prompt) => (
+                          <button
+                            key={prompt.text}
+                            onClick={() =>
+                              sendMessage({
+                                role: "user",
+                                parts: [{ type: "text", text: prompt.text }]
+                              })
+                            }
+                            disabled={isStreaming}
+                            className="suggestion-pill px-4 py-2"
+                            title={prompt.description}
+                          >
+                            {prompt.text}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {messages.map((message: UIMessage, index: number) => {
-                    const isUser = message.role === "user";
-                    const isLastAssistant =
-                      message.role === "assistant" &&
-                      index === messages.length - 1;
+                ) : (
+                  <div className="space-y-6">
+                    {messages.map((message: UIMessage, index: number) => {
+                      const isUser = message.role === "user";
+                      const isLastAssistant =
+                        message.role === "assistant" &&
+                        index === messages.length - 1;
 
-                    return (
-                      <div
-                        key={message.id}
-                        className="animate-fade-in"
-                        style={{ animationDelay: `${index * 50}ms` }}
-                      >
-                        {showDebug && (
-                          <pre className="text-[10px] text-[var(--color-warm-gray-400)] bg-[var(--color-warm-gray-50)] rounded-lg p-3 mb-2 overflow-auto max-h-40 font-mono">
-                            {JSON.stringify(message, null, 2)}
-                          </pre>
-                        )}
+                      return (
+                        <div
+                          key={message.id}
+                          className="animate-fade-in"
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          {showDebug && (
+                            <pre className="text-[10px] text-[var(--color-warm-gray-400)] bg-[var(--color-warm-gray-50)] rounded-lg p-3 mb-2 overflow-auto max-h-40 font-mono">
+                              {JSON.stringify(message, null, 2)}
+                            </pre>
+                          )}
 
-                        {message.parts.filter(isToolUIPart).map((part) => (
-                          <ToolPartView
-                            key={part.toolCallId}
-                            part={part}
-                            addToolApprovalResponse={addToolApprovalResponse}
-                          />
-                        ))}
-
-                        {message.parts
-                          .filter(
-                            (part) =>
-                              part.type === "reasoning" &&
-                              (part as { text?: string }).text?.trim(),
-                          )
-                          .map((part, i) => {
-                            const reasoning = part as {
-                              type: "reasoning";
-                              text: string;
-                              state?: "streaming" | "done";
-                            };
-                            const isDone =
-                              reasoning.state === "done" || !isStreaming;
-                            return (
-                              <div key={i} className="flex justify-start mb-4">
-                                <details
-                                  className="max-w-[85%] w-full"
-                                  open={!isDone}
-                                >
-                                  <summary className="flex items-center gap-2 cursor-pointer px-4 py-3 reasoning-box">
-                                    <BrainIcon size={16} />
-                                    <span className="font-medium">
-                                      Thinking
-                                    </span>
-                                    <Badge
-                                      variant={isDone ? "secondary" : "primary"}
-                                      className="text-xs ml-auto"
-                                    >
-                                      {isDone ? "Complete" : "In progress"}
-                                    </Badge>
-                                  </summary>
-                                  <pre className="mt-2 px-4 py-3 bg-[var(--color-warm-gray-50)] text-xs text-[var(--color-warm-gray-600)] whitespace-pre-wrap font-mono">
-                                    {reasoning.text}
-                                  </pre>
-                                </details>
-                              </div>
-                            );
-                          })}
-
-                        {message.parts
-                          .filter(
-                            (
-                              part,
-                            ): part is Extract<typeof part, { type: "file" }> =>
-                              part.type === "file" &&
-                              (
-                                part as { mediaType?: string }
-                              ).mediaType?.startsWith("image/") === true,
-                          )
-                          .map((part, i) => (
-                            <div
-                              key={i}
-                              className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}
-                            >
-                              <img
-                                src={part.url}
-                                alt="Attachment"
-                                className="max-h-64 rounded-lg shadow-sm"
-                              />
-                            </div>
+                          {message.parts.filter(isToolUIPart).map((part) => (
+                            <ToolPartView
+                              key={part.toolCallId}
+                              part={part}
+                              addToolApprovalResponse={addToolApprovalResponse}
+                            />
                           ))}
 
-                        {message.parts
-                          .filter((part) => part.type === "text")
-                          .map((part, i) => {
-                            const text = (
-                              part as { type: "text"; text: string }
-                            ).text;
-                            if (!text) return null;
-
-                            if (isUser) {
+                          {message.parts
+                            .filter(
+                              (part) =>
+                                part.type === "reasoning" &&
+                                (part as { text?: string }).text?.trim()
+                            )
+                            .map((part, i) => {
+                              const reasoning = part as {
+                                type: "reasoning";
+                                text: string;
+                                state?: "streaming" | "done";
+                              };
+                              const isDone =
+                                reasoning.state === "done" || !isStreaming;
                               return (
-                                <div key={i} className="flex justify-end mb-4">
-                                  <div className="max-w-[80%] message-user px-5 py-3 text-[15px] leading-relaxed">
-                                    {text}
+                                <div
+                                  key={i}
+                                  className="flex justify-start mb-4"
+                                >
+                                  <details
+                                    className="max-w-[85%] w-full"
+                                    open={!isDone}
+                                  >
+                                    <summary className="flex items-center gap-2 cursor-pointer px-4 py-3 reasoning-box">
+                                      <BrainIcon size={16} />
+                                      <span className="font-medium">
+                                        Thinking
+                                      </span>
+                                      <Badge
+                                        variant={
+                                          isDone ? "secondary" : "primary"
+                                        }
+                                        className="text-xs ml-auto"
+                                      >
+                                        {isDone ? "Complete" : "In progress"}
+                                      </Badge>
+                                    </summary>
+                                    <pre className="mt-2 px-4 py-3 bg-[var(--color-warm-gray-50)] text-xs text-[var(--color-warm-gray-600)] whitespace-pre-wrap font-mono">
+                                      {reasoning.text}
+                                    </pre>
+                                  </details>
+                                </div>
+                              );
+                            })}
+
+                          {message.parts
+                            .filter(
+                              (
+                                part
+                              ): part is Extract<
+                                typeof part,
+                                { type: "file" }
+                              > =>
+                                part.type === "file" &&
+                                (
+                                  part as { mediaType?: string }
+                                ).mediaType?.startsWith("image/") === true
+                            )
+                            .map((part, i) => (
+                              <div
+                                key={i}
+                                className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}
+                              >
+                                <img
+                                  src={part.url}
+                                  alt="Attachment"
+                                  className="max-h-64 rounded-lg shadow-sm"
+                                />
+                              </div>
+                            ))}
+
+                          {message.parts
+                            .filter((part) => part.type === "text")
+                            .map((part, i) => {
+                              const text = (
+                                part as { type: "text"; text: string }
+                              ).text;
+                              if (!text) return null;
+
+                              if (isUser) {
+                                return (
+                                  <div
+                                    key={i}
+                                    className="flex justify-end mb-4"
+                                  >
+                                    <div className="max-w-[80%] message-user px-5 py-3 text-[15px] leading-relaxed">
+                                      {text}
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex justify-start mb-4"
+                                >
+                                  <div className="max-w-[80%] message-assistant">
+                                    <Streamdown
+                                      className="sd-theme rounded-lg p-5"
+                                      plugins={{ code }}
+                                      controls={false}
+                                      isAnimating={
+                                        isLastAssistant && isStreaming
+                                      }
+                                    >
+                                      {text}
+                                    </Streamdown>
                                   </div>
                                 </div>
                               );
-                            }
-
-                            return (
-                              <div key={i} className="flex justify-start mb-4">
-                                <div className="max-w-[80%] message-assistant">
-                                  <Streamdown
-                                    className="sd-theme rounded-lg p-5"
-                                    plugins={{ code }}
-                                    controls={false}
-                                    isAnimating={isLastAssistant && isStreaming}
-                                  >
-                                    {text}
-                                  </Streamdown>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    );
-                  })}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div className="py-4">
-              <div className="calm-input p-2">
-                {attachments.length > 0 && (
-                  <div className="flex gap-2 px-3 pt-2 pb-3 overflow-x-auto">
-                    {attachments.map((att) => (
-                      <div
-                        key={att.id}
-                        className="relative group flex-shrink-0"
-                      >
-                        {att.fileType === "image" ? (
-                          <img
-                            src={att.preview}
-                            alt={att.file.name}
-                            className="h-14 w-14 object-cover rounded-lg"
-                          />
-                        ) : (
-                          <div className="h-14 w-14 flex flex-col items-center justify-center bg-[var(--color-warm-gray-100)] rounded-lg border border-[var(--color-warm-gray-200)]">
-                            <PaperclipIcon
-                              size={20}
-                              className="text-[var(--color-warm-gray-500)]"
-                            />
-                            <span className="text-[8px] text-[var(--color-warm-gray-500)] mt-1 uppercase font-medium">
-                              {getDocumentType(att.file)}
-                            </span>
-                          </div>
-                        )}
-                        <span className="absolute -bottom-4 left-0 right-0 text-[10px] text-center text-[var(--color-warm-gray-500)] truncate max-w-[56px]">
-                          {att.file.name.length > 8
-                            ? att.file.name.slice(0, 6) + ".."
-                            : att.file.name}
-                        </span>
-                        <button
-                          onClick={() => removeAttachment(att.id)}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[var(--color-warm-gray-800)] text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                        >
-                          <XIcon size={12} />
-                        </button>
-                      </div>
-                    ))}
+                            })}
+                        </div>
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
                   </div>
                 )}
-
-                <div className="flex items-center gap-2 p-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!connected || isStreaming}
-                    className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors flex items-center justify-center"
-                  >
-                    <PaperclipIcon size={20} />
-                  </button>
-
-                  {/* Voice button */}
-                  <button
-                    onClick={handleStartVoiceCall}
-                    disabled={!connected || isStreaming}
-                    className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors flex items-center justify-center"
-                    title="Start voice conversation"
-                  >
-                    <MicrophoneIcon size={20} />
-                  </button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,.md,.txt,.pdf,.doc,.docx,.odt"
-                    className="hidden"
-                    onChange={(e) => e.target.files && addFiles(e.target.files)}
-                  />
-
-                  <div className="flex-1">
-                    <textarea
-                      ref={textareaRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          send();
-                        }
-                      }}
-                      placeholder="Send a message..."
-                      disabled={!connected || isStreaming}
-                      rows={1}
-                      className="w-full px-4 py-3 bg-transparent resize-none outline-none text-[var(--color-warm-gray-800)] placeholder:text-[var(--color-warm-gray-400)]"
-                      style={{ minHeight: "48px", maxHeight: "120px" }}
-                    />
-                  </div>
-
-                  {isStreaming ? (
-                    <button
-                      onClick={stop}
-                      className="p-3 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                    >
-                      <StopIcon size={20} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={send}
-                      disabled={
-                        (!input.trim() && attachments.length === 0) ||
-                        !connected
-                      }
-                      className="p-3 rounded-lg btn-calm disabled:opacity-50"
-                    >
-                      <PaperPlaneRightIcon size={20} />
-                    </button>
-                  )}
-                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          /* Search Tab */
-          <div className="h-full flex flex-col max-w-3xl mx-auto px-6">
-            {!hasSearched ? (
-              <div className="flex-1 flex flex-col items-center justify-center">
-                <div className="text-center max-w-xl">
-                  <BooksIcon
-                    size={48}
-                    className="mx-auto mb-6 text-[var(--color-warm-gray-300)]"
-                  />
-                  <h2 className="text-2xl font-medium mb-3">
-                    Search your wiki
-                  </h2>
-                  <p className="text-[var(--color-warm-gray-500)] mb-8">
-                    Find anything in your knowledge base
-                  </p>
 
-                  <div className="calm-input p-2 flex gap-2 max-w-2xl mx-auto">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                      placeholder="What are you looking for?"
-                      disabled={!connected || isSearching}
-                      className="flex-1 px-4 py-3  outline-none text-lg placeholder:text-[var(--color-warm-gray-400)]"
-                    />
-                    <button
-                      onClick={handleSearch}
-                      disabled={
-                        !connected || isSearching || !searchQuery.trim()
-                      }
-                      className="px-6 py-3 rounded-lg btn-calm disabled:opacity-50 flex items-center gap-2"
-                    >
-                      <MagnifyingGlassIcon size={20} />
-                      <span>{isSearching ? "Searching..." : "Search"}</span>
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap justify-center gap-2 mt-8">
-                    {isLoadingSuggestions ? (
-                      <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
-                        <div className="w-4 h-4 border-2 border-[var(--text-tertiary)] border-t-transparent rounded-full animate-spin" />
-                        Loading suggestions...
-                      </div>
-                    ) : searchSuggestions.length > 0 ? (
-                      searchSuggestions.slice(0, 4).map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => {
-                            setSearchQuery(suggestion);
-                            setTimeout(handleSearch, 100);
-                          }}
-                          className="suggestion-pill px-4 py-2"
+              {/* Input */}
+              <div className="py-4">
+                <div className="calm-input p-2">
+                  {attachments.length > 0 && (
+                    <div className="flex gap-2 px-3 pt-2 pb-3 overflow-x-auto">
+                      {attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          className="relative group flex-shrink-0"
                         >
-                          {suggestion}
-                        </button>
-                      ))
+                          {att.fileType === "image" ? (
+                            <img
+                              src={att.preview}
+                              alt={att.file.name}
+                              className="h-14 w-14 object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="h-14 w-14 flex flex-col items-center justify-center bg-[var(--color-warm-gray-100)] rounded-lg border border-[var(--color-warm-gray-200)]">
+                              <PaperclipIcon
+                                size={20}
+                                className="text-[var(--color-warm-gray-500)]"
+                              />
+                              <span className="text-[8px] text-[var(--color-warm-gray-500)] mt-1 uppercase font-medium">
+                                {getDocumentType(att.file)}
+                              </span>
+                            </div>
+                          )}
+                          <span className="absolute -bottom-4 left-0 right-0 text-[10px] text-center text-[var(--color-warm-gray-500)] truncate max-w-[56px]">
+                            {att.file.name.length > 8
+                              ? att.file.name.slice(0, 6) + ".."
+                              : att.file.name}
+                          </span>
+                          <button
+                            onClick={() => removeAttachment(att.id)}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[var(--color-warm-gray-800)] text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          >
+                            <XIcon size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 p-2">
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={!connected || isStreaming}
+                      className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors flex items-center justify-center"
+                    >
+                      <PaperclipIcon size={20} />
+                    </button>
+
+                    {/* Voice input button - Cloudflare voice */}
+                    <button
+                      onClick={isListening ? stopVoiceInput : startVoiceInput}
+                      disabled={!connected || isStreaming}
+                      className={`p-3 rounded-lg transition-colors flex items-center justify-center relative ${
+                        isListening
+                          ? "bg-red-100 text-red-600"
+                          : "hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)]"
+                      }`}
+                      title={
+                        isListening ? "Stop recording" : "Start voice input"
+                      }
+                    >
+                      <MicrophoneIcon size={20} />
+                      {/* Audio level indicator when listening */}
+                      {isListening && audioLevel > 0.1 && (
+                        <span
+                          className="absolute inset-0 rounded-lg border-2 border-red-400 animate-pulse"
+                          style={{ opacity: Math.min(1, audioLevel * 2) }}
+                        />
+                      )}
+                    </button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.md,.txt,.pdf,.doc,.docx,.odt"
+                      className="hidden"
+                      onChange={(e) =>
+                        e.target.files && addFiles(e.target.files)
+                      }
+                    />
+
+                    <div className="flex-1 relative">
+                      <textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            send();
+                          }
+                        }}
+                        placeholder={
+                          isListening ? "Listening..." : "Send a message..."
+                        }
+                        disabled={!connected || isStreaming}
+                        rows={1}
+                        className="w-full px-4 py-3 bg-transparent resize-none outline-none text-[var(--color-warm-gray-800)] placeholder:text-[var(--color-warm-gray-400)]"
+                        style={{ minHeight: "48px", maxHeight: "120px" }}
+                      />
+                      {/* Interim transcription overlay */}
+                      {isListening && voiceInterimTranscript && (
+                        <div className="absolute inset-0 px-4 py-3 pointer-events-none text-[var(--color-warm-gray-400)] flex items-center">
+                          <span className="truncate">
+                            {voiceInterimTranscript}
+                          </span>
+                          <span className="inline-block w-0.5 h-5 bg-[var(--color-warm-gray-400)] ml-1 animate-pulse" />
+                        </div>
+                      )}
+                    </div>
+
+                    {isStreaming ? (
+                      <button
+                        onClick={stop}
+                        className="p-3 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                      >
+                        <StopIcon size={20} />
+                      </button>
                     ) : (
-                      <p className="text-sm text-[var(--text-tertiary)]">
-                        No suggestions yet. Start indexing documents to get
-                        personalized suggestions.
-                      </p>
+                      <button
+                        onClick={send}
+                        disabled={
+                          (!input.trim() && attachments.length === 0) ||
+                          !connected
+                        }
+                        className="p-3 rounded-lg btn-calm disabled:opacity-50"
+                      >
+                        <PaperPlaneRightIcon size={20} />
+                      </button>
                     )}
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="h-full flex flex-col py-6">
-                {/* Search Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="flex-1 calm-input p-2 flex gap-2">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                      placeholder="Search..."
-                      className="flex-1 px-4 py-2 bg-transparent outline-none"
+            </div>
+          ) : (
+            /* Search Tab */
+            <div className="h-full flex flex-col max-w-3xl mx-auto px-6">
+              {!hasSearched ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <div className="text-center max-w-xl">
+                    <BooksIcon
+                      size={48}
+                      className="mx-auto mb-6 text-[var(--color-warm-gray-300)]"
                     />
+                    <h2 className="text-2xl font-medium mb-3">
+                      Search your wiki
+                    </h2>
+                    <p className="text-[var(--color-warm-gray-500)] mb-8">
+                      Find anything in your knowledge base
+                    </p>
+
+                    <div className="calm-input p-2 flex gap-2 max-w-2xl mx-auto">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                        placeholder="What are you looking for?"
+                        disabled={!connected || isSearching}
+                        className="flex-1 px-4 py-3  outline-none text-lg placeholder:text-[var(--color-warm-gray-400)]"
+                      />
+                      <button
+                        onClick={handleSearch}
+                        disabled={
+                          !connected || isSearching || !searchQuery.trim()
+                        }
+                        className="px-6 py-3 rounded-lg btn-calm disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <MagnifyingGlassIcon size={20} />
+                        <span>{isSearching ? "Searching..." : "Search"}</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center gap-2 mt-8">
+                      {isLoadingSuggestions ? (
+                        <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
+                          <div className="w-4 h-4 border-2 border-[var(--text-tertiary)] border-t-transparent rounded-full animate-spin" />
+                          Loading suggestions...
+                        </div>
+                      ) : searchSuggestions.length > 0 ? (
+                        searchSuggestions.slice(0, 4).map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => {
+                              setSearchQuery(suggestion);
+                              setTimeout(handleSearch, 100);
+                            }}
+                            className="suggestion-pill px-4 py-2"
+                          >
+                            {suggestion}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-sm text-[var(--text-tertiary)]">
+                          No suggestions yet. Start indexing documents to get
+                          personalized suggestions.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col py-6">
+                  {/* Search Header */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="flex-1 calm-input p-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                        placeholder="Search..."
+                        className="flex-1 px-4 py-2 bg-transparent outline-none"
+                      />
+                      <button
+                        onClick={handleSearch}
+                        disabled={isSearching}
+                        className="px-4 py-2 rounded-lg btn-calm disabled:opacity-50"
+                      >
+                        <MagnifyingGlassIcon size={18} />
+                      </button>
+                    </div>
                     <button
-                      onClick={handleSearch}
-                      disabled={isSearching}
-                      className="px-4 py-2 rounded-lg btn-calm disabled:opacity-50"
+                      onClick={() => {
+                        setHasSearched(false);
+                        setSearchResults([]);
+                        setSearchQuery("");
+                      }}
+                      className="px-4 py-2 rounded-lg btn-secondary"
                     >
-                      <MagnifyingGlassIcon size={18} />
+                      Clear
                     </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      setHasSearched(false);
-                      setSearchResults([]);
-                      setSearchQuery("");
-                    }}
-                    className="px-4 py-2 rounded-lg btn-secondary"
-                  >
-                    Clear
-                  </button>
-                </div>
 
-                {/* Results */}
-                <div className="mb-4">
-                  <span className="text-sm text-[var(--color-warm-gray-600)]">
-                    {searchResults.length} result
-                    {searchResults.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
+                  {/* Results */}
+                  <div className="mb-4">
+                    <span className="text-sm text-[var(--color-warm-gray-600)]">
+                      {searchResults.length} result
+                      {searchResults.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
 
-                <div className="flex-1 overflow-y-auto space-y-3">
-                  {isSearching ? (
-                    <SearchSkeleton count={3} />
-                  ) : searchResults.length === 0 ? (
-                    <div className="text-center py-12 text-[var(--color-warm-gray-400)]">
-                      <MagnifyingGlassIcon
-                        size={48}
-                        className="mx-auto mb-4 opacity-50"
-                      />
-                      <p>No results found. Try a different query.</p>
-                    </div>
-                  ) : (
-                    searchResults.map((result, index) => (
-                      <SearchResultCard
-                        key={result.id}
-                        result={result}
-                        index={index}
-                      />
-                    ))
-                  )}
+                  <div className="flex-1 overflow-y-auto scrollbar-hide space-y-3">
+                    {isSearching ? (
+                      <SearchSkeleton count={3} />
+                    ) : searchResults.length === 0 ? (
+                      <div className="text-center py-12 text-[var(--color-warm-gray-400)]">
+                        <MagnifyingGlassIcon
+                          size={48}
+                          className="mx-auto mb-4 opacity-50"
+                        />
+                        <p>No results found. Try a different query.</p>
+                      </div>
+                    ) : (
+                      searchResults.map((result, index) => (
+                        <SearchResultCard
+                          key={result.id}
+                          result={result}
+                          index={index}
+                        />
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>{" "}
+      {/* End of Main Content */}
+    </div> /* End of flex container */
   );
 }
 

@@ -7,7 +7,6 @@ import {
   XIcon,
   PencilIcon,
   TrashIcon,
-  CheckIcon,
   SidebarSimpleIcon,
   ClockIcon
 } from "@phosphor-icons/react";
@@ -35,6 +34,7 @@ interface ChatHistorySidebarProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onNewChat: () => void;
+  connected?: boolean;
 }
 
 export function ChatHistorySidebar({
@@ -43,12 +43,13 @@ export function ChatHistorySidebar({
   onToggle,
   currentSessionId,
   onSessionSelect,
-  onNewChat
+  onNewChat,
+  connected = false
 }: ChatHistorySidebarProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [groupedSessions, setGroupedSessions] = useState<GroupedSessions[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const [_isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -219,7 +220,8 @@ export function ChatHistorySidebar({
             shape="square"
             onClick={onNewChat}
             aria-label="New chat"
-            title="New chat"
+            title={connected ? "New chat" : "Connect to start new chat"}
+            disabled={!connected}
           >
             <PlusIcon size={18} />
           </Button>
@@ -266,10 +268,13 @@ export function ChatHistorySidebar({
       <div className="p-3">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors text-left"
+          disabled={!connected}
+          className="w-full flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors text-left"
         >
           <PlusIcon size={18} />
-          <span className="font-medium">New Chat</span>
+          <span className="font-medium">
+            {connected ? "New Chat" : "Connecting..."}
+          </span>
         </button>
       </div>
 

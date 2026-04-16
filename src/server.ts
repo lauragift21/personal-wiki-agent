@@ -21,7 +21,6 @@ import {
   renameSession,
   deleteSession,
   searchSessions,
-  updateSessionAfterMessage,
   formatTimeAgo as formatSessionTimeAgo,
   type ChatSession
 } from "./sessions";
@@ -467,25 +466,39 @@ export class ChatAgent extends AIChatAgent<Env> {
 
   @callable()
   async createChatSession(name?: string): Promise<ChatSession> {
-    if (!this.sessionsInitialized) {
-      initializeSessionsTable(this.sql);
-      this.sessionsInitialized = true;
+    console.log("[createChatSession] Called with name:", name);
+
+    try {
+      if (!this.sessionsInitialized) {
+        console.log("[createChatSession] Initializing sessions table...");
+        initializeSessionsTable(this.sql);
+        this.sessionsInitialized = true;
+      }
+
+      const sessionName = name || `Chat ${new Date().toLocaleDateString()}`;
+      console.log(
+        "[createChatSession] Creating session with name:",
+        sessionName
+      );
+
+      const session = createSession(this.sql, sessionName);
+      console.log("[createChatSession] Session created:", session);
+
+      this.currentSessionId = session.id;
+
+      // Broadcast session creation to all connected clients
+      this.broadcast(
+        JSON.stringify({
+          type: "session-created",
+          session
+        })
+      );
+
+      return session;
+    } catch (error) {
+      console.error("[createChatSession] Error:", error);
+      throw error;
     }
-
-    const sessionName = name || `Chat ${new Date().toLocaleDateString()}`;
-    const session = createSession(this.sql, sessionName);
-    this.currentSessionId = session.id;
-
-    // Clear current conversation history for new session
-    // Note: AIChatAgent automatically persists messages, but we track which session they belong to
-    this.broadcast(
-      JSON.stringify({
-        type: "session-created",
-        session
-      })
-    );
-
-    return session;
   }
 
   @callable()
