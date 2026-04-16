@@ -1084,7 +1084,7 @@ function Chat() {
                         }
                         disabled={!connected || isStreaming}
                         rows={1}
-                        className="w-full px-4 py-3 bg-transparent resize-none outline-none text-[var(--color-warm-gray-800)] placeholder:text-[var(--color-warm-gray-400)]"
+                        className="w-full px-4 py-3 bg-transparent resize-none outline-none scrollbar-hide text-[var(--color-warm-gray-800)] placeholder:text-[var(--color-warm-gray-400)]"
                         style={{ minHeight: "48px", maxHeight: "120px" }}
                       />
                       {/* Interim transcription overlay */}
