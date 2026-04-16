@@ -27,7 +27,7 @@ import {
   BooksIcon,
   MicrophoneIcon,
   PhoneSlashIcon,
-  PhoneIcon,
+  PhoneIcon
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
@@ -66,7 +66,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.text"
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -83,7 +83,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt",
+    odt: "odt"
   };
   return typeMap[extension || ""] || "document";
 }
@@ -95,7 +95,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document",
+    fileType: isImage ? "image" : "document"
   };
 }
 
@@ -112,7 +112,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark",
+    () => document.documentElement.getAttribute("data-mode") === "dark"
   );
 
   const toggle = useCallback(() => {
@@ -146,7 +146,7 @@ function ConnectionIndicator({ connected }: { connected: boolean }) {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse,
+  addToolApprovalResponse
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -279,13 +279,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000,
+              timeout: 5000
             });
           }
         } catch {}
       },
-      [toasts],
-    ),
+      [toasts]
+    )
   });
 
   // Chat hook
@@ -295,7 +295,7 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status,
+    status
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -307,14 +307,51 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString(),
-          },
+            localTime: new Date().toLocaleTimeString()
+          }
         });
       }
-    },
+    }
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
+
+  // Voice agent hook
+  const {
+    status: voiceStatus,
+    transcript: voiceTranscript,
+    interimTranscript: voiceInterimTranscript,
+    audioLevel,
+    isMuted,
+    error: voiceError,
+    startCall,
+    endCall,
+    toggleMute
+  } = useVoiceAgent({
+    agent: "VoiceChatAgent"
+  });
+
+  // Start voice call
+  const handleStartVoiceCall = useCallback(async () => {
+    setShowVoiceModal(true);
+    try {
+      await startCall();
+    } catch (error) {
+      console.error("[Voice] Failed to start call:", error);
+      toasts.add({
+        title: "Voice call failed",
+        description:
+          "Could not start voice conversation. Please check microphone permissions.",
+        timeout: 5000
+      });
+    }
+  }, [startCall, toasts]);
+
+  // End voice call
+  const handleEndVoiceCall = useCallback(() => {
+    endCall();
+    setShowVoiceModal(false);
+  }, [endCall]);
 
   // Effects
   useEffect(() => {
@@ -359,14 +396,14 @@ function Chat() {
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f),
+        (f) => f.type.startsWith("image/") || isDocumentFile(f)
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000,
+          timeout: 5000
         });
         return;
       }
@@ -397,11 +434,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000,
+          timeout: 3000
         });
       }
     },
-    [readFileAsText, toasts],
+    [readFileAsText, toasts]
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -431,7 +468,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles],
+    [addFiles]
   );
 
   const send = useCallback(async () => {
@@ -454,7 +491,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri,
+          url: dataUri
         });
       } else if (att.fileType === "document") {
         // For text-based documents, ingest directly via RPC first
@@ -476,7 +513,7 @@ function Chat() {
           doc.file.name,
           doc.content || "",
           doc.file.type || "text/plain",
-          "note",
+          "note"
         );
 
         if (result.success) {
@@ -518,7 +555,7 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10,
+        10
       );
       setSearchResults(result.results || []);
     } catch (error) {
@@ -536,6 +573,135 @@ function Chat() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Voice Modal */}
+      {showVoiceModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--color-warm-gray-900)]/80 backdrop-blur-sm">
+          <div className="bg-[var(--bg-secondary)] rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4 animate-fade-in">
+            <div className="text-center">
+              {/* Status indicator */}
+              <div className="mb-6">
+                <div
+                  className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center transition-all duration-300 ${
+                    voiceStatus === "listening"
+                      ? "bg-blue-100 animate-pulse"
+                      : voiceStatus === "thinking"
+                        ? "bg-amber-100"
+                        : voiceStatus === "speaking"
+                          ? "bg-green-100"
+                          : "bg-[var(--color-warm-gray-100)]"
+                  }`}
+                >
+                  {voiceStatus === "listening" ? (
+                    <MicrophoneIcon size={32} className="text-blue-600" />
+                  ) : voiceStatus === "thinking" ? (
+                    <BrainIcon size={32} className="text-amber-600" />
+                  ) : voiceStatus === "speaking" ? (
+                    <div className="flex items-center gap-1">
+                      <span
+                        className="w-1 h-6 bg-green-600 rounded animate-pulse"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <span
+                        className="w-1 h-8 bg-green-600 rounded animate-pulse"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <span
+                        className="w-1 h-6 bg-green-600 rounded animate-pulse"
+                        style={{ animationDelay: "300ms" }}
+                      />
+                    </div>
+                  ) : (
+                    <PhoneIcon
+                      size={32}
+                      className="text-[var(--color-warm-gray-500)]"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Status text */}
+              <h3 className="text-xl font-semibold mb-2">
+                {voiceStatus === "idle" && "Starting call..."}
+                {voiceStatus === "listening" && "Listening..."}
+                {voiceStatus === "thinking" && "Thinking..."}
+                {voiceStatus === "speaking" && "Speaking..."}
+              </h3>
+
+              {/* Interim transcript */}
+              {voiceInterimTranscript && (
+                <p className="text-[var(--text-tertiary)] italic mb-4">
+                  &ldquo;{voiceInterimTranscript}&rdquo;
+                </p>
+              )}
+
+              {/* Audio level indicator */}
+              {voiceStatus === "listening" && (
+                <div className="flex justify-center gap-1 h-8 mb-6">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-blue-500 rounded-full transition-all duration-100"
+                      style={{
+                        height: `${Math.max(20, Math.min(100, (audioLevel || 0) * 100 + Math.random() * 30))}%`,
+                        opacity: 0.3 + (i / 20) * 0.7
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Conversation transcript */}
+              {voiceTranscript.length > 0 && (
+                <div className="text-left mb-6 max-h-48 overflow-y-auto p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                  {voiceTranscript.slice(-5).map((msg, i) => (
+                    <div key={i} className="mb-2 last:mb-0">
+                      <span
+                        className={`text-xs font-medium ${
+                          msg.role === "user"
+                            ? "text-blue-600"
+                            : "text-green-600"
+                        }`}
+                      >
+                        {msg.role === "user" ? "You" : "Agent"}:
+                      </span>
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        {msg.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Error display */}
+              {voiceError && (
+                <p className="text-red-500 text-sm mb-4">{voiceError}</p>
+              )}
+
+              {/* Controls */}
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={toggleMute}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    isMuted
+                      ? "bg-red-100 text-red-600"
+                      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)]"
+                  }`}
+                >
+                  {isMuted ? "Unmute" : "Mute"}
+                </button>
+                <button
+                  onClick={handleEndVoiceCall}
+                  className="px-6 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors flex items-center gap-2"
+                >
+                  <PhoneSlashIcon size={18} />
+                  End Call
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Drag Overlay */}
       {isDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-warm-gray-800)]/50 backdrop-blur-sm">
@@ -565,13 +731,13 @@ function Chat() {
       {/* Header */}
       <header className="calm-header px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
+          {/* Logo - Fixed width */}
+          <div className="flex items-center gap-3 w-[120px]">
             <h1 className="text-xl font-semibold tracking-tight">wiki-agent</h1>
           </div>
 
-          {/* Tabs - Prominent */}
-          <div className="flex items-center bg-[var(--bg-tertiary)] rounded-lg p-1">
+          {/* Tabs - Prominent - Centered */}
+          <div className="flex items-center justify-center bg-[var(--bg-tertiary)] rounded-lg p-1">
             <button
               onClick={() => setActiveTab("chat")}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
@@ -649,14 +815,14 @@ function Chat() {
                         "Journal today's insights",
                         "Find my notes on ML",
                         "Ingest an article",
-                        "What did I learn last week?",
+                        "What did I learn last week?"
                       ].map((prompt) => (
                         <button
                           key={prompt}
                           onClick={() =>
                             sendMessage({
                               role: "user",
-                              parts: [{ type: "text", text: prompt }],
+                              parts: [{ type: "text", text: prompt }]
                             })
                           }
                           disabled={isStreaming}
@@ -700,7 +866,7 @@ function Chat() {
                           .filter(
                             (part) =>
                               part.type === "reasoning" &&
-                              (part as { text?: string }).text?.trim(),
+                              (part as { text?: string }).text?.trim()
                           )
                           .map((part, i) => {
                             const reasoning = part as {
@@ -739,12 +905,12 @@ function Chat() {
                         {message.parts
                           .filter(
                             (
-                              part,
+                              part
                             ): part is Extract<typeof part, { type: "file" }> =>
                               part.type === "file" &&
                               (
                                 part as { mediaType?: string }
-                              ).mediaType?.startsWith("image/") === true,
+                              ).mediaType?.startsWith("image/") === true
                           )
                           .map((part, i) => (
                             <div
@@ -852,6 +1018,16 @@ function Chat() {
                     <PaperclipIcon size={20} />
                   </button>
 
+                  {/* Voice button */}
+                  <button
+                    onClick={handleStartVoiceCall}
+                    disabled={!connected || isStreaming}
+                    className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors flex items-center justify-center"
+                    title="Start voice conversation"
+                  >
+                    <MicrophoneIcon size={20} />
+                  </button>
+
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -943,23 +1119,30 @@ function Chat() {
                   </div>
 
                   <div className="flex flex-wrap justify-center gap-2 mt-8">
-                    {[
-                      "machine learning",
-                      "journal entries",
-                      "project notes",
-                      "meeting summaries",
-                    ].map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        onClick={() => {
-                          setSearchQuery(suggestion);
-                          setTimeout(handleSearch, 100);
-                        }}
-                        className="suggestion-pill px-4 py-2"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
+                    {isLoadingSuggestions ? (
+                      <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
+                        <div className="w-4 h-4 border-2 border-[var(--text-tertiary)] border-t-transparent rounded-full animate-spin" />
+                        Loading suggestions...
+                      </div>
+                    ) : searchSuggestions.length > 0 ? (
+                      searchSuggestions.slice(0, 4).map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => {
+                            setSearchQuery(suggestion);
+                            setTimeout(handleSearch, 100);
+                          }}
+                          className="suggestion-pill px-4 py-2"
+                        >
+                          {suggestion}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-sm text-[var(--text-tertiary)]">
+                        No suggestions yet. Start indexing documents to get
+                        personalized suggestions.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
