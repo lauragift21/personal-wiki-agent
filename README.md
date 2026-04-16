@@ -96,20 +96,6 @@ src/
                                    └─────────────────┘
 ```
 
-## Environment Variables
-
-No API keys required — uses Cloudflare Workers AI (included with your account).
-
-## Local Development Limitations
-
-When running locally (`npm run dev`):
-
-- ✅ Chat and scheduling work
-- ✅ MCP connections work
-- ✅ AI Search (wiki ingest/query)
-
-The wiki tools will return helpful messages explaining you need to deploy to use them.
-
 ## Customization
 
 ### Change the AI Model
@@ -118,7 +104,7 @@ Edit `server.ts`:
 
 ```ts
 const result = streamText({
-  model: workersai("@cf/meta/llama-3.3-70b-instruct")
+  model: workersai("@cf/moonshotai/kimi-k2.5")
   // ...
 });
 ```
