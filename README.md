@@ -121,7 +121,9 @@ return instance.search({
       retrieval_type: "hybrid",
       fusion_method: "rrf",
       match_threshold: 0.4, // Adjust relevance threshold
-      max_num_results: 10 // Adjust result count
+      max_num_results: 10, // Adjust result count
+      boost_by: [{ field: "timestamp", direction: "desc" }], // Add relevance boosting
+
     },
     reranking: {
       enabled: true,
