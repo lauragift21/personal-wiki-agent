@@ -8,7 +8,7 @@ import {
   stepCountIs,
   streamText,
   tool,
-  type ModelMessage
+  type ModelMessage,
 } from "ai";
 import { z } from "zod";
 
@@ -19,7 +19,7 @@ async function searchWiki(
   options: {
     retrievalType?: "vector" | "keyword" | "hybrid";
     maxResults?: number;
-  } = {}
+  } = {},
 ) {
   console.log("[searchWiki] Searching for:", query);
   console.log("[searchWiki] Options:", options);
@@ -32,19 +32,19 @@ async function searchWiki(
           retrieval_type: options.retrievalType || "hybrid",
           fusion_method: "rrf",
           match_threshold: 0.4,
-          max_num_results: options.maxResults || 10
+          max_num_results: options.maxResults || 10,
         },
         reranking: {
           enabled: true,
-          model: "@cf/baai/bge-reranker-base"
-        }
-      }
+          model: "@cf/baai/bge-reranker-base",
+        },
+      },
     });
 
     console.log(
       "[searchWiki] Search successful, found",
       result.chunks?.length || 0,
-      "chunks"
+      "chunks",
     );
     return result;
   } catch (error) {
@@ -57,7 +57,7 @@ async function uploadDocument(
   instance: AiSearchInstance,
   key: string,
   content: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   // AI Search requires ALL metadata values to be strings
   const stringMetadata: Record<string, string> = {};
@@ -72,44 +72,17 @@ async function uploadDocument(
   console.log("[uploadDocument] Content length:", content.length);
 
   try {
-    // Try uploadAndPoll first for immediate searchability
-    const result = await instance.items.uploadAndPoll(key, content, {
+    // Use regular upload (uploadAndPoll has issues with gzip responses in local dev)
+    const result = await instance.items.upload(key, content, {
       metadata: stringMetadata,
-      timeoutMs: 60000
-    } as AiSearchUploadItemOptions);
-    console.log(
-      "[uploadDocument] uploadAndPoll SUCCESS:",
-      key,
-      "Status:",
-      result.status
-    );
-    return result;
-  } catch (pollError) {
-    // If uploadAndPoll fails with item_not_found, fallback to regular upload
-    const errorMessage = String(pollError);
-    console.warn("[uploadDocument] uploadAndPoll failed:", errorMessage);
-
-    if (errorMessage.includes("item_not_found")) {
-      console.log("[uploadDocument] Falling back to regular upload():", key);
-      try {
-        const result = await instance.items.upload(key, content, {
-          metadata: stringMetadata
-        });
-        console.log("[uploadDocument] Regular upload SUCCESS:", key);
-        // Wait a bit for indexing to start
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return { ...result, status: "queued" };
-      } catch (uploadError) {
-        console.error(
-          "[uploadDocument] Regular upload also failed:",
-          uploadError
-        );
-        throw uploadError;
-      }
-    }
-
-    // If it's a different error, throw it
-    throw pollError;
+    });
+    console.log("[uploadDocument] Upload SUCCESS:", key);
+    // Wait a bit for indexing to start
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return { ...result, status: "queued" };
+  } catch (uploadError) {
+    console.error("[uploadDocument] Upload failed:", uploadError);
+    throw uploadError;
   }
 }
 
@@ -120,25 +93,30 @@ async function listDocuments(instance: AiSearchInstance) {
 
 async function getDocument(
   instance: AiSearchInstance,
-  key: string
+  key: string,
 ): Promise<string | null> {
-  const item = instance.items.get(key);
-  const result = await item.download();
-  if (!result || !result.body) return null;
+  try {
+    const item = instance.items.get(key);
+    const result = await item.download();
+    if (!result || !result.body) return null;
 
-  // Read the stream into a string
-  const reader = result.body.getReader();
-  const decoder = new TextDecoder();
-  let content = "";
+    // Read the stream into a string
+    const reader = result.body.getReader();
+    const decoder = new TextDecoder();
+    let content = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    content += decoder.decode(value, { stream: true });
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      content += decoder.decode(value, { stream: true });
+    }
+    content += decoder.decode();
+
+    return content;
+  } catch (error) {
+    // Document doesn't exist - return null
+    return null;
   }
-  content += decoder.decode();
-
-  return content;
 }
 
 /**
@@ -158,7 +136,7 @@ function inlineDataUrls(messages: ModelMessage[]): ModelMessage[] {
         if (!match) return part;
         const bytes = Uint8Array.from(atob(match[2]), (c) => c.charCodeAt(0));
         return { ...part, data: bytes, mediaType: match[1] };
-      })
+      }),
     };
   });
 }
@@ -192,7 +170,7 @@ export class ChatAgent extends AIChatAgent<Env> {
   // Wrap methods with error handling to prevent crashes
   private safeExecute<T>(
     operation: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
   ): Promise<T | { error: string }> {
     return fn().catch((error) => {
       console.error(`[Agent] Error in ${operation}:`, error);
@@ -207,14 +185,14 @@ export class ChatAgent extends AIChatAgent<Env> {
         if (result.authSuccess) {
           return new Response("<script>window.close();</script>", {
             headers: { "content-type": "text/html" },
-            status: 200
+            status: 200,
           });
         }
         return new Response(
           `Authentication Failed: ${result.authError || "Unknown error"}`,
-          { headers: { "content-type": "text/plain" }, status: 400 }
+          { headers: { "content-type": "text/plain" }, status: 400 },
         );
-      }
+      },
     });
 
     // Initialize SQLite tables
@@ -227,7 +205,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     await this.logActivity(
       "system",
       "Agent started",
-      "Wiki agent initialized and ready"
+      "Wiki agent initialized and ready",
     );
 
     // Broadcast agent ready state
@@ -269,7 +247,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     type: ActivityType,
     subject: string,
     details: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ) {
     try {
       const activity: Activity = {
@@ -278,7 +256,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         subject,
         details,
         timestamp: Date.now(),
-        metadata: metadata ? JSON.stringify(metadata) : undefined
+        metadata: metadata ? JSON.stringify(metadata) : undefined,
       };
 
       this.sql`
@@ -298,9 +276,9 @@ export class ChatAgent extends AIChatAgent<Env> {
           type: "activity",
           activity: {
             ...activity,
-            timeAgo: this.formatTimeAgo(activity.timestamp)
-          }
-        })
+            timeAgo: this.formatTimeAgo(activity.timestamp),
+          },
+        }),
       );
     } catch (error) {
       console.error("[Agent] Failed to log activity:", error);
@@ -332,7 +310,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         subject: row.subject as string,
         details: row.details as string,
         timestamp: row.timestamp as number,
-        metadata: row.metadata as string | undefined
+        metadata: row.metadata as string | undefined,
       }));
     } catch (error) {
       console.error("[Agent] Failed to get activities:", error);
@@ -358,8 +336,8 @@ export class ChatAgent extends AIChatAgent<Env> {
       JSON.stringify({
         type: "agent-status",
         status,
-        timestamp: new Date().toISOString()
-      })
+        timestamp: new Date().toISOString(),
+      }),
     );
   }
 
@@ -381,7 +359,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       const info = await this.instance.info();
       console.log(`[Wiki] Connected to instance: ${instanceId}`, {
         status: info.status,
-        hybrid: info.index_method
+        hybrid: info.index_method,
       });
 
       await this.createDefaultWikiStructure();
@@ -424,7 +402,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
 
 ---
 *Initialized: ${new Date(now).toLocaleString()}*`,
-      { category: "index", title: "Index" }
+      { category: "index", title: "Index" },
     );
 
     await uploadDocument(
@@ -438,7 +416,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
 
 ---
 `,
-      { category: "log", title: "Activity Log" }
+      { category: "log", title: "Activity Log" },
     );
   }
 
@@ -447,7 +425,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     operation: ActivityType,
     subject: string,
     details: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ) {
     try {
       // Log to SQLite for real-time feed
@@ -466,7 +444,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
 
         await uploadDocument(this.instance, "log.md", newLog, {
           category: "log",
-          title: "Activity Log"
+          title: "Activity Log",
         });
       } catch (logError) {
         // Markdown log update failed but SQLite succeeded - don't crash
@@ -507,8 +485,8 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
       initialized: true,
       stats: {
         totalPages: docs.length,
-        byCategory
-      }
+        byCategory,
+      },
     };
   }
 
@@ -518,7 +496,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     fileName: string,
     content: string,
     contentType: string,
-    docType: "journal" | "article" | "note" | "goal" | "health" = "note"
+    docType: "journal" | "article" | "note" | "goal" | "health" = "note",
   ) {
     if (!this.instance) {
       return { error: "Wiki not initialized" };
@@ -534,7 +512,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         originalName: fileName,
         contentType: contentType,
         createdAt: String(now),
-        source: "file_upload"
+        source: "file_upload",
       };
 
       await uploadDocument(this.instance, docId, content, metadata);
@@ -545,8 +523,8 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         {
           docId,
           docType,
-          contentType
-        }
+          contentType,
+        },
       );
 
       return {
@@ -554,12 +532,12 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         message: `Successfully ingested "${fileName}" as ${docType}. Document ID: ${docId}`,
         docId,
         searchable: true,
-        method: "hybrid (vector + keyword with RRF fusion)"
+        method: "hybrid (vector + keyword with RRF fusion)",
       };
     } catch (error) {
       return {
         error: "Failed to upload document",
-        details: String(error)
+        details: String(error),
       };
     }
   }
@@ -572,9 +550,9 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
       activities: activities.map((a: Activity) => ({
         ...a,
         timeAgo: this.formatTimeAgo(a.timestamp),
-        metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+        metadata: a.metadata ? JSON.parse(a.metadata) : undefined,
       })),
-      total: this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count || 0
+      total: this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count || 0,
     };
   }
 
@@ -591,10 +569,10 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         ? {
             type: lastActivity.type,
             subject: lastActivity.subject,
-            timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+            timeAgo: this.formatTimeAgo(lastActivity.timestamp),
           }
         : null,
-      scheduledTasks: this.getSchedules().length
+      scheduledTasks: this.getSchedules().length,
     };
   }
 
@@ -603,12 +581,12 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
   async queryWiki(
     query: string,
     retrievalType: "vector" | "keyword" | "hybrid" = "hybrid",
-    maxResults: number = 5
+    maxResults: number = 5,
   ) {
     console.log("[Server queryWiki] Called with:", {
       query,
       retrievalType,
-      maxResults
+      maxResults,
     });
     console.log("[Server queryWiki] Instance available:", !!this.instance);
     console.log("[Server queryWiki] Initialized:", this.initialized);
@@ -621,23 +599,23 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     try {
       const searchResults = await searchWiki(this.instance, query, {
         retrievalType,
-        maxResults
+        maxResults,
       });
 
       console.log(
         "[Server queryWiki] Search completed, found:",
         searchResults.chunks.length,
-        "chunks"
+        "chunks",
       );
       console.log(
         "[Server queryWiki] Search query used:",
-        searchResults.search_query
+        searchResults.search_query,
       );
 
       await this.updateLog(
         "query",
         query,
-        `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`
+        `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`,
       );
 
       console.log("[Server queryWiki] Processing chunks...");
@@ -650,12 +628,12 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
             overallScore: chunk.score,
             vectorScore: chunk.scoring_details?.vector_score || 0,
             keywordScore: chunk.scoring_details?.keyword_score || 0,
-            fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
+            fusionMethod: chunk.scoring_details?.fusion_method || "rrf",
           };
         } catch (chunkError) {
           console.error(
             `[Server queryWiki] Error processing chunk ${index}:`,
-            chunkError
+            chunkError,
           );
           return {
             id: chunk.id || `chunk-${index}`,
@@ -664,7 +642,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
             overallScore: chunk.score || 0,
             vectorScore: 0,
             keywordScore: 0,
-            fusionMethod: "rrf"
+            fusionMethod: "rrf",
           };
         }
       });
@@ -674,13 +652,13 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
         query: searchResults.search_query,
         method: retrievalType,
         totalResults: results.length,
-        results
+        results,
       };
 
       console.log(
         "[Server queryWiki] Returning response with",
         response.results.length,
-        "results"
+        "results",
       );
       return response;
     } catch (error) {
@@ -695,7 +673,7 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
 
     const result = streamText({
       model: workersai("@cf/moonshotai/kimi-k2.5", {
-        sessionAffinity: this.sessionAffinity
+        sessionAffinity: this.sessionAffinity,
       }),
       system: `You are a Personal Wiki Agent with hybrid search capabilities. You help users build and query a personal knowledge base.
 
@@ -753,7 +731,7 @@ Users can also use:
 ${getSchedulePrompt({ date: new Date() })}`,
       messages: pruneMessages({
         messages: inlineDataUrls(await convertToModelMessages(this.messages)),
-        toolCalls: "before-last-2-messages"
+        toolCalls: "before-last-2-messages",
       }),
       tools: {
         ...mcpTools,
@@ -777,17 +755,17 @@ ${getSchedulePrompt({ date: new Date() })}`,
             if (!input) return "Invalid schedule type";
             try {
               this.schedule(input, "executeTask", description, {
-                idempotent: true
+                idempotent: true,
               });
               await this.updateLog("schedule", "Task scheduled", description, {
                 scheduleType: when.type,
-                input
+                input,
               });
               return `Task scheduled: "${description}" (${when.type}: ${input})`;
             } catch (error) {
               return `Error scheduling task: ${error}`;
             }
-          }
+          },
         }),
 
         getScheduledTasks: tool({
@@ -796,13 +774,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
           execute: async () => {
             const tasks = this.getSchedules();
             return tasks.length > 0 ? tasks : "No scheduled tasks found.";
-          }
+          },
         }),
 
         cancelScheduledTask: tool({
           description: "Cancel a scheduled task by its ID",
           inputSchema: z.object({
-            taskId: z.string().describe("The ID of the task to cancel")
+            taskId: z.string().describe("The ID of the task to cancel"),
           }),
           execute: async ({ taskId }) => {
             try {
@@ -811,7 +789,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             } catch (error) {
               return `Error cancelling task: ${error}`;
             }
-          }
+          },
         }),
 
         // WIKI TOOLS
@@ -828,7 +806,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             tags: z
               .array(z.string())
               .optional()
-              .describe("Optional tags for categorization")
+              .describe("Optional tags for categorization"),
           }),
           execute: async ({ title, content, docType, tags }) => {
             if (!this.instance) {
@@ -844,7 +822,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 title: title,
                 tags: tags ? tags.join(", ") : "",
                 createdAt: String(now),
-                source: "ingest"
+                source: "ingest",
               };
 
               await uploadDocument(this.instance, docId, content, metadata);
@@ -855,8 +833,8 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 {
                   docId,
                   docType,
-                  tags: tags || []
-                }
+                  tags: tags || [],
+                },
               );
 
               return {
@@ -864,15 +842,15 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 message: `Successfully ingested "${title}" as ${docType}. Document ID: ${docId}`,
                 docId,
                 searchable: true,
-                method: "hybrid (vector + keyword with RRF fusion)"
+                method: "hybrid (vector + keyword with RRF fusion)",
               };
             } catch (error) {
               return {
                 error: "Failed to upload document",
-                details: String(error)
+                details: String(error),
               };
             }
-          }
+          },
         }),
 
         queryWiki: tool({
@@ -887,7 +865,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             maxResults: z
               .number()
               .optional()
-              .describe("Maximum number of results (default: 5)")
+              .describe("Maximum number of results (default: 5)"),
           }),
           execute: async ({ query, retrievalType, maxResults }) => {
             if (!this.instance) {
@@ -896,13 +874,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             const searchResults = await searchWiki(this.instance, query, {
               retrievalType: retrievalType || "hybrid",
-              maxResults: maxResults || 5
+              maxResults: maxResults || 5,
             });
 
             await this.updateLog(
               "query",
               query,
-              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`
+              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`,
             );
 
             return {
@@ -916,10 +894,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 overallScore: chunk.score,
                 vectorScore: chunk.scoring_details?.vector_score || 0,
                 keywordScore: chunk.scoring_details?.keyword_score || 0,
-                fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
-              }))
+                fusionMethod: chunk.scoring_details?.fusion_method || "rrf",
+              })),
             };
-          }
+          },
         }),
 
         lintWiki: tool({
@@ -943,23 +921,23 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             if (!byCategory["source"] || byCategory["source"] === 0) {
               suggestions.push(
-                "Add some source documents (journal entries, articles) to build your wiki"
+                "Add some source documents (journal entries, articles) to build your wiki",
               );
             }
 
             await this.updateLog(
               "lint",
               "Health check",
-              `Checked ${allDocs.length} pages`
+              `Checked ${allDocs.length} pages`,
             );
 
             return {
               totalPages: allDocs.length,
               byCategory,
               suggestions,
-              healthy: suggestions.length === 0
+              healthy: suggestions.length === 0,
             };
-          }
+          },
         }),
 
         getWikiStats: tool({
@@ -988,10 +966,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 "Keyword index (BM25) for exact matches",
                 "RRF fusion for optimal ranking",
                 "Per-request retrieval type override",
-                "Detailed scoring transparency"
-              ]
+                "Detailed scoring transparency",
+              ],
             };
-          }
+          },
         }),
 
         getActivityLog: tool({
@@ -1011,10 +989,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 "lint",
                 "mcp_connect",
                 "mcp_disconnect",
-                "system"
+                "system",
               ])
               .optional()
-              .describe("Filter by activity type")
+              .describe("Filter by activity type"),
           }),
           execute: async ({ limit, type }) => {
             const activities = this.queryActivities(limit || 10, type);
@@ -1026,13 +1004,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 details: a.details,
                 timestamp: a.timestamp,
                 timeAgo: this.formatTimeAgo(a.timestamp),
-                metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+                metadata: a.metadata ? JSON.parse(a.metadata) : undefined,
               })),
               total:
                 this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count ||
-                0
+                0,
             };
-          }
+          },
         }),
 
         getAgentStatus: tool({
@@ -1052,20 +1030,20 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 ? {
                     type: lastActivity.type,
                     subject: lastActivity.subject,
-                    timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+                    timeAgo: this.formatTimeAgo(lastActivity.timestamp),
                   }
                 : null,
               scheduledTasks: schedules.length,
               upcomingTasks: schedules.slice(0, 5).map((s) => ({
                 id: s.id,
-                description: s.payload
-              }))
+                description: s.payload,
+              })),
             };
-          }
-        })
+          },
+        }),
       },
       stopWhen: stepCountIs(10),
-      abortSignal: options?.abortSignal
+      abortSignal: options?.abortSignal,
     });
 
     return result.toUIMessageStreamResponse();
@@ -1081,8 +1059,8 @@ ${getSchedulePrompt({ date: new Date() })}`,
       JSON.stringify({
         type: "scheduled-task",
         description,
-        timestamp: new Date().toISOString()
-      })
+        timestamp: new Date().toISOString(),
+      }),
     );
   }
 }
@@ -1104,22 +1082,22 @@ export default {
               "lintWiki",
               "getWikiStats",
               "getActivityLog",
-              "getAgentStatus"
+              "getAgentStatus",
             ],
             agentFeatures: [
               "Activity feed with real-time updates",
               "Agent status and presence",
               "Scheduled task tracking",
-              "Persistent activity logging"
+              "Persistent activity logging",
             ],
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           },
           null,
-          2
+          2,
         ),
         {
-          headers: { "Content-Type": "application/json" }
-        }
+          headers: { "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -1127,5 +1105,5 @@ export default {
       (await routeAgentRequest(request, env)) ||
       new Response("Not found", { status: 404 })
     );
-  }
+  },
 } satisfies ExportedHandler<Env>;
