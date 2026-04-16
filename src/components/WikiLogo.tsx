@@ -1,0 +1,60 @@
+interface WikiLogoProps {
+  size?: number;
+  className?: string;
+}
+
+export function WikiLogo({ size = 48, className = "" }: WikiLogoProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Background */}
+      <rect
+        width="100"
+        height="100"
+        rx="20"
+        fill="currentColor"
+        className="text-[#2d3748]"
+      />
+
+      {/* Book 1 (left, leaning right) */}
+      <g transform="translate(20, 25) rotate(-15, 25, 40)">
+        {/* Book cover */}
+        <rect x="0" y="0" width="30" height="55" rx="3" fill="#e2e8f0" />
+        {/* Book spine */}
+        <rect x="0" y="0" width="6" height="55" rx="2" fill="#4a5568" />
+        {/* Book pages */}
+        <rect x="4" y="2" width="24" height="51" rx="1" fill="#f7fafc" />
+        {/* Page lines */}
+        <line x1="8" y1="8" x2="24" y2="8" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="8" y1="14" x2="24" y2="14" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="8" y1="20" x2="24" y2="20" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="8" y1="26" x2="24" y2="26" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="8" y1="32" x2="20" y2="32" stroke="#cbd5e0" strokeWidth="1" />
+      </g>
+
+      {/* Book 2 (right, leaning left) */}
+      <g transform="translate(45, 25) rotate(15, 25, 40)">
+        {/* Book cover */}
+        <rect x="0" y="0" width="30" height="55" rx="3" fill="#e2e8f0" />
+        {/* Book spine */}
+        <rect x="24" y="0" width="6" height="55" rx="2" fill="#4a5568" />
+        {/* Book pages */}
+        <rect x="2" y="2" width="24" height="51" rx="1" fill="#f7fafc" />
+        {/* Page lines */}
+        <line x1="6" y1="8" x2="22" y2="8" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="6" y1="14" x2="22" y2="14" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="6" y1="20" x2="22" y2="20" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="6" y1="26" x2="22" y2="26" stroke="#cbd5e0" strokeWidth="1" />
+        <line x1="6" y1="32" x2="18" y2="32" stroke="#cbd5e0" strokeWidth="1" />
+      </g>
+
+      {/* Decorative accent */}
+      <circle cx="75" cy="25" r="4" fill="#ed8936" opacity="0.8" />
+    </svg>
+  );
+}

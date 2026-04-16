@@ -8,26 +8,11 @@ import {
   stepCountIs,
   streamText,
   tool,
-  type ModelMessage
+  type ModelMessage,
 } from "ai";
 import { z } from "zod";
 import { searchWiki, uploadDocument, listDocuments } from "./ai-search";
 import { VoiceChatAgent } from "./voice-agent";
-import {
-  initializeSessionsTable,
-  initializeChatMessagesTable,
-  listSessions,
-  createSession,
-  getSession,
-  renameSession,
-  deleteSession,
-  searchSessions,
-  saveMessage,
-  loadMessages,
-  clearSessionMessages,
-  formatTimeAgo as formatSessionTimeAgo,
-  type ChatSession
-} from "./sessions";
 
 // Re-export VoiceChatAgent so it can be instantiated by the router
 export { VoiceChatAgent };
@@ -49,7 +34,7 @@ function inlineDataUrls(messages: ModelMessage[]): ModelMessage[] {
         if (!match) return part;
         const bytes = Uint8Array.from(atob(match[2]), (c) => c.charCodeAt(0));
         return { ...part, data: bytes, mediaType: match[1] };
-      })
+      }),
     };
   });
 }
@@ -80,40 +65,10 @@ export class ChatAgent extends AIChatAgent<Env> {
   private initialized = false;
   private activityBuffer: Activity[] = [];
 
-  // Session management
-  private currentSessionId: string | null = null;
-  private sessionsInitialized = false;
-
-  // Override persistMessages to save messages per session
-  async persistMessages(messages: typeof this.messages): Promise<void> {
-    if (!this.currentSessionId) {
-      // No active session, don't persist
-      return;
-    }
-
-    // Clear existing messages for this session and save new ones
-    clearSessionMessages(this, this.currentSessionId);
-
-    for (const msg of messages) {
-      // Extract text content from message parts
-      let content = "";
-      if (Array.isArray(msg.parts)) {
-        content = msg.parts
-          .filter((part) => part.type === "text")
-          .map((part) => (part as { text?: string }).text || "")
-          .join("\n");
-      }
-
-      if (content) {
-        saveMessage(this, this.currentSessionId, msg.role, content);
-      }
-    }
-  }
-
   // Wrap methods with error handling to prevent crashes
   private safeExecute<T>(
     operation: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
   ): Promise<T | { error: string }> {
     return fn().catch((error) => {
       console.error(`[Agent] Error in ${operation}:`, error);
@@ -128,14 +83,14 @@ export class ChatAgent extends AIChatAgent<Env> {
         if (result.authSuccess) {
           return new Response("<script>window.close();</script>", {
             headers: { "content-type": "text/html" },
-            status: 200
+            status: 200,
           });
         }
         return new Response(
           `Authentication Failed: ${result.authError || "Unknown error"}`,
-          { headers: { "content-type": "text/plain" }, status: 400 }
+          { headers: { "content-type": "text/plain" }, status: 400 },
         );
-      }
+      },
     });
 
     // Initialize SQLite tables
@@ -144,44 +99,15 @@ export class ChatAgent extends AIChatAgent<Env> {
     // Initialize AI Search wiki
     await this.initializeWiki();
 
-    // Initialize sessions table and restore current session
-    await this.initializeSessionState();
-
     // Log system startup
     await this.logActivity(
       "system",
       "Agent started",
-      "Wiki agent initialized and ready"
+      "Wiki agent initialized and ready",
     );
 
     // Broadcast agent ready state
     this.broadcastAgentStatus("ready");
-  }
-
-  // Initialize session state on startup
-  private async initializeSessionState() {
-    if (!this.sessionsInitialized) {
-      console.log("[initializeSessionState] Initializing sessions table...");
-      initializeSessionsTable(this);
-      this.sessionsInitialized = true;
-    }
-
-    // Try to restore the most recent session
-    const sessions = listSessions(this, 1);
-    if (sessions.length > 0) {
-      const mostRecent = sessions[0];
-      console.log(
-        "[initializeSessionState] Restoring most recent session:",
-        mostRecent.id,
-        mostRecent.name
-      );
-      this.currentSessionId = mostRecent.id;
-    } else {
-      console.log(
-        "[initializeSessionState] No existing sessions, starting fresh"
-      );
-      this.currentSessionId = null;
-    }
   }
 
   // Initialize SQLite tables for agent features
@@ -219,7 +145,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     type: ActivityType,
     subject: string,
     details: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ) {
     try {
       const activity: Activity = {
@@ -228,7 +154,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         subject,
         details,
         timestamp: Date.now(),
-        metadata: metadata ? JSON.stringify(metadata) : undefined
+        metadata: metadata ? JSON.stringify(metadata) : undefined,
       };
 
       this.sql`
@@ -248,9 +174,9 @@ export class ChatAgent extends AIChatAgent<Env> {
           type: "activity",
           activity: {
             ...activity,
-            timeAgo: this.formatTimeAgo(activity.timestamp)
-          }
-        })
+            timeAgo: this.formatTimeAgo(activity.timestamp),
+          },
+        }),
       );
     } catch (error) {
       console.error("[Agent] Failed to log activity:", error);
@@ -282,7 +208,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         subject: row.subject as string,
         details: row.details as string,
         timestamp: row.timestamp as number,
-        metadata: row.metadata as string | undefined
+        metadata: row.metadata as string | undefined,
       }));
     } catch (error) {
       console.error("[Agent] Failed to get activities:", error);
@@ -308,8 +234,8 @@ export class ChatAgent extends AIChatAgent<Env> {
       JSON.stringify({
         type: "agent-status",
         status,
-        timestamp: new Date().toISOString()
-      })
+        timestamp: new Date().toISOString(),
+      }),
     );
   }
 
@@ -331,7 +257,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       const info = await this.instance.info();
       console.log(`[Wiki] Connected to instance: ${instanceId}`, {
         status: info.status,
-        hybrid: info.index_method
+        hybrid: info.index_method,
       });
 
       this.initialized = true;
@@ -348,7 +274,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     operation: ActivityType,
     subject: string,
     details: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ) {
     try {
       // Log to SQLite for real-time feed
@@ -375,7 +301,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
     if (!this.instance || !this.initialized) {
       console.log(
-        "[Server getWikiStats] Wiki not initialized, attempting lazy init..."
+        "[Server getWikiStats] Wiki not initialized, attempting lazy init...",
       );
       await this.initializeWiki();
     }
@@ -396,8 +322,8 @@ export class ChatAgent extends AIChatAgent<Env> {
       initialized: true,
       stats: {
         totalPages: docs.length,
-        byCategory
-      }
+        byCategory,
+      },
     };
   }
 
@@ -407,12 +333,12 @@ export class ChatAgent extends AIChatAgent<Env> {
     fileName: string,
     content: string,
     contentType: string,
-    docType: "journal" | "article" | "note" | "goal" | "health" = "note"
+    docType: "journal" | "article" | "note" | "goal" | "health" = "note",
   ) {
     // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
     if (!this.instance || !this.initialized) {
       console.log(
-        "[Server ingestFile] Wiki not initialized, attempting lazy init..."
+        "[Server ingestFile] Wiki not initialized, attempting lazy init...",
       );
       await this.initializeWiki();
     }
@@ -431,7 +357,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         originalName: fileName,
         contentType: contentType,
         createdAt: String(now),
-        source: "file_upload"
+        source: "file_upload",
       };
 
       await uploadDocument(this.instance, docId, content, metadata);
@@ -442,8 +368,8 @@ export class ChatAgent extends AIChatAgent<Env> {
         {
           docId,
           docType,
-          contentType
-        }
+          contentType,
+        },
       );
 
       return {
@@ -451,12 +377,12 @@ export class ChatAgent extends AIChatAgent<Env> {
         message: `Successfully ingested "${fileName}" as ${docType}. Document ID: ${docId}`,
         docId,
         searchable: true,
-        method: "hybrid (vector + keyword with RRF fusion)"
+        method: "hybrid (vector + keyword with RRF fusion)",
       };
     } catch (error) {
       return {
         error: "Failed to upload document",
-        details: String(error)
+        details: String(error),
       };
     }
   }
@@ -469,9 +395,9 @@ export class ChatAgent extends AIChatAgent<Env> {
       activities: activities.map((a: Activity) => ({
         ...a,
         timeAgo: this.formatTimeAgo(a.timestamp),
-        metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+        metadata: a.metadata ? JSON.parse(a.metadata) : undefined,
       })),
-      total: this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count || 0
+      total: this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count || 0,
     };
   }
 
@@ -488,130 +414,11 @@ export class ChatAgent extends AIChatAgent<Env> {
         ? {
             type: lastActivity.type,
             subject: lastActivity.subject,
-            timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+            timeAgo: this.formatTimeAgo(lastActivity.timestamp),
           }
         : null,
       scheduledTasks: this.getSchedules().length,
-      currentSession: this.currentSessionId
-        ? getSession(this.sql, this.currentSessionId)
-        : null
     };
-  }
-
-  // ── Chat Session Management ──────────────────────────────────────────
-
-  @callable()
-  async listChatSessions(limit?: number): Promise<{
-    sessions: Array<ChatSession & { timeAgo: string }>;
-    total: number;
-  }> {
-    if (!this.sessionsInitialized) {
-      initializeSessionsTable(this);
-      this.sessionsInitialized = true;
-    }
-
-    const sessions = listSessions(this, limit ?? 50);
-    const total = this.sql`SELECT COUNT(*) as count FROM chat_sessions`[0]
-      ?.count as number;
-
-    return {
-      sessions: sessions.map((s) => ({
-        ...s,
-        timeAgo: formatSessionTimeAgo(s.lastMessageAt)
-      })),
-      total: total || 0
-    };
-  }
-
-  @callable()
-  async createChatSession(name?: string): Promise<ChatSession> {
-    console.log("[createChatSession] Called with name:", name);
-
-    try {
-      if (!this.sessionsInitialized) {
-        console.log("[createChatSession] Initializing sessions table...");
-        initializeSessionsTable(this);
-        this.sessionsInitialized = true;
-      }
-
-      const sessionName = name || `Chat ${new Date().toLocaleDateString()}`;
-      console.log(
-        "[createChatSession] Creating session with name:",
-        sessionName
-      );
-
-      const session = createSession(this, sessionName);
-      console.log("[createChatSession] Session created:", session);
-
-      this.currentSessionId = session.id;
-
-      // Broadcast session creation to all connected clients
-      this.broadcast(
-        JSON.stringify({
-          type: "session-created",
-          session
-        })
-      );
-
-      return session;
-    } catch (error) {
-      console.error("[createChatSession] Error:", error);
-      throw error;
-    }
-  }
-
-  @callable()
-  async getCurrentSession(): Promise<ChatSession | null> {
-    if (!this.currentSessionId) return null;
-    return getSession(this, this.currentSessionId);
-  }
-
-  @callable()
-  async setCurrentSession(sessionId: string): Promise<ChatSession | null> {
-    const session = getSession(this, sessionId);
-    if (session) {
-      this.currentSessionId = sessionId;
-
-      // Load messages for this session
-      const messages = loadMessages(this, sessionId);
-
-      this.broadcast(
-        JSON.stringify({
-          type: "session-changed",
-          session,
-          messages
-        })
-      );
-    }
-    return session;
-  }
-
-  @callable()
-  async renameChatSession(
-    sessionId: string,
-    newName: string
-  ): Promise<boolean> {
-    return renameSession(this, sessionId, newName);
-  }
-
-  @callable()
-  async deleteChatSession(sessionId: string): Promise<boolean> {
-    const success = deleteSession(this, sessionId);
-    if (success && this.currentSessionId === sessionId) {
-      this.currentSessionId = null;
-    }
-    return success;
-  }
-
-  @callable()
-  async searchChatSessions(
-    query: string
-  ): Promise<Array<ChatSession & { timeAgo: string }>> {
-    const sessions = searchSessions(this, query);
-    return sessions.map((s) => ({
-      ...s,
-      timeAgo: formatSessionTimeAgo(s.lastMessageAt)
-    }));
   }
 
   // Get dynamic search suggestions based on indexed documents and recent searches
@@ -643,7 +450,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     } catch (error) {
       console.error(
         "[getSearchSuggestions] Failed to get recent queries:",
-        error
+        error,
       );
     }
 
@@ -728,7 +535,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       } catch (error) {
         console.error(
           "[getSearchSuggestions] Failed to get document suggestions:",
-          error
+          error,
         );
       }
     }
@@ -742,12 +549,12 @@ export class ChatAgent extends AIChatAgent<Env> {
   async queryWiki(
     query: string,
     retrievalType: "vector" | "keyword" | "hybrid" = "hybrid",
-    maxResults: number = 5
+    maxResults: number = 5,
   ) {
     console.log("[Server queryWiki] Called with:", {
       query,
       retrievalType,
-      maxResults
+      maxResults,
     });
     console.log("[Server queryWiki] Instance available:", !!this.instance);
     console.log("[Server queryWiki] Initialized:", this.initialized);
@@ -755,7 +562,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
     if (!this.instance || !this.initialized) {
       console.log(
-        "[Server queryWiki] Wiki not initialized, attempting lazy init..."
+        "[Server queryWiki] Wiki not initialized, attempting lazy init...",
       );
       await this.initializeWiki();
     }
@@ -768,23 +575,23 @@ export class ChatAgent extends AIChatAgent<Env> {
     try {
       const searchResults = await searchWiki(this.instance, query, {
         retrievalType,
-        maxResults
+        maxResults,
       });
 
       console.log(
         "[Server queryWiki] Search completed, found:",
         searchResults.chunks.length,
-        "chunks"
+        "chunks",
       );
       console.log(
         "[Server queryWiki] Search query used:",
-        searchResults.search_query
+        searchResults.search_query,
       );
 
       await this.updateLog(
         "query",
         query,
-        `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`
+        `Retrieved ${searchResults.chunks.length} results using ${retrievalType} search`,
       );
 
       console.log("[Server queryWiki] Processing chunks...");
@@ -797,12 +604,12 @@ export class ChatAgent extends AIChatAgent<Env> {
             overallScore: chunk.score,
             vectorScore: chunk.scoring_details?.vector_score || 0,
             keywordScore: chunk.scoring_details?.keyword_score || 0,
-            fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
+            fusionMethod: chunk.scoring_details?.fusion_method || "rrf",
           };
         } catch (chunkError) {
           console.error(
             `[Server queryWiki] Error processing chunk ${index}:`,
-            chunkError
+            chunkError,
           );
           return {
             id: chunk.id || `chunk-${index}`,
@@ -811,7 +618,7 @@ export class ChatAgent extends AIChatAgent<Env> {
             overallScore: chunk.score || 0,
             vectorScore: 0,
             keywordScore: 0,
-            fusionMethod: "rrf"
+            fusionMethod: "rrf",
           };
         }
       });
@@ -821,13 +628,13 @@ export class ChatAgent extends AIChatAgent<Env> {
         query: searchResults.search_query,
         method: retrievalType,
         totalResults: results.length,
-        results
+        results,
       };
 
       console.log(
         "[Server queryWiki] Returning response with",
         response.results.length,
-        "results"
+        "results",
       );
       return response;
     } catch (error) {
@@ -842,7 +649,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       console.error("[onChatMessage] No messages available");
       return new Response(JSON.stringify({ error: "No messages to process" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -851,7 +658,7 @@ export class ChatAgent extends AIChatAgent<Env> {
 
     const result = streamText({
       model: workersai("@cf/moonshotai/kimi-k2.5", {
-        sessionAffinity: this.sessionAffinity
+        sessionAffinity: this.sessionAffinity,
       }),
       abortSignal: options?.abortSignal,
       system: `You are a Personal Wiki Agent with hybrid search capabilities. You help users build and query a personal knowledge base.
@@ -910,9 +717,9 @@ Users can also use:
 ${getSchedulePrompt({ date: new Date() })}`,
       messages: pruneMessages({
         messages: inlineDataUrls(
-          await convertToModelMessages(this.messages || [])
+          await convertToModelMessages(this.messages || []),
         ),
-        toolCalls: "before-last-2-messages"
+        toolCalls: "before-last-2-messages",
       }),
       tools: {
         ...mcpTools,
@@ -936,17 +743,17 @@ ${getSchedulePrompt({ date: new Date() })}`,
             if (!input) return "Invalid schedule type";
             try {
               this.schedule(input, "executeTask", description, {
-                idempotent: true
+                idempotent: true,
               });
               await this.updateLog("schedule", "Task scheduled", description, {
                 scheduleType: when.type,
-                input
+                input,
               });
               return `Task scheduled: "${description}" (${when.type}: ${input})`;
             } catch (error) {
               return `Error scheduling task: ${error}`;
             }
-          }
+          },
         }),
 
         getScheduledTasks: tool({
@@ -955,13 +762,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
           execute: async () => {
             const tasks = this.getSchedules();
             return tasks.length > 0 ? tasks : "No scheduled tasks found.";
-          }
+          },
         }),
 
         cancelScheduledTask: tool({
           description: "Cancel a scheduled task by its ID",
           inputSchema: z.object({
-            taskId: z.string().describe("The ID of the task to cancel")
+            taskId: z.string().describe("The ID of the task to cancel"),
           }),
           execute: async ({ taskId }) => {
             try {
@@ -970,7 +777,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             } catch (error) {
               return `Error cancelling task: ${error}`;
             }
-          }
+          },
         }),
 
         // WIKI TOOLS
@@ -987,7 +794,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             tags: z
               .array(z.string())
               .optional()
-              .describe("Optional tags for categorization")
+              .describe("Optional tags for categorization"),
           }),
           execute: async ({ title, content, docType, tags }) => {
             // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
@@ -1007,7 +814,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
               title: title,
               tags: tags ? tags.join(", ") : "",
               createdAt: String(now),
-              source: "ingest"
+              source: "ingest",
             };
 
             // Fire-and-forget upload - return immediately
@@ -1021,18 +828,18 @@ ${getSchedulePrompt({ date: new Date() })}`,
                   {
                     docId,
                     docType,
-                    tags: tags || []
-                  }
+                    tags: tags || [],
+                  },
                 );
                 console.log(
                   "[ingestDocument] Background upload completed:",
-                  docId
+                  docId,
                 );
               })
               .catch((error) => {
                 console.error(
                   "[ingestDocument] Background upload failed:",
-                  error
+                  error,
                 );
               });
 
@@ -1043,9 +850,9 @@ ${getSchedulePrompt({ date: new Date() })}`,
               docId,
               status: "uploading",
               searchable: false,
-              method: "hybrid (vector + keyword with RRF fusion)"
+              method: "hybrid (vector + keyword with RRF fusion)",
             };
-          }
+          },
         }),
 
         queryWiki: tool({
@@ -1060,7 +867,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
             maxResults: z
               .number()
               .optional()
-              .describe("Maximum number of results (default: 5)")
+              .describe("Maximum number of results (default: 5)"),
           }),
           execute: async ({ query, retrievalType, maxResults }) => {
             // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
@@ -1074,13 +881,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             const searchResults = await searchWiki(this.instance, query, {
               retrievalType: retrievalType || "hybrid",
-              maxResults: maxResults || 5
+              maxResults: maxResults || 5,
             });
 
             await this.updateLog(
               "query",
               query,
-              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`
+              `Retrieved ${searchResults.chunks.length} results using ${retrievalType || "hybrid"} search`,
             );
 
             return {
@@ -1094,10 +901,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 overallScore: chunk.score,
                 vectorScore: chunk.scoring_details?.vector_score || 0,
                 keywordScore: chunk.scoring_details?.keyword_score || 0,
-                fusionMethod: chunk.scoring_details?.fusion_method || "rrf"
-              }))
+                fusionMethod: chunk.scoring_details?.fusion_method || "rrf",
+              })),
             };
-          }
+          },
         }),
 
         lintWiki: tool({
@@ -1126,23 +933,23 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             if (!byCategory["source"] || byCategory["source"] === 0) {
               suggestions.push(
-                "Add some source documents (journal entries, articles) to build your wiki"
+                "Add some source documents (journal entries, articles) to build your wiki",
               );
             }
 
             await this.updateLog(
               "lint",
               "Health check",
-              `Checked ${allDocs.length} pages`
+              `Checked ${allDocs.length} pages`,
             );
 
             return {
               totalPages: allDocs.length,
               byCategory,
               suggestions,
-              healthy: suggestions.length === 0
+              healthy: suggestions.length === 0,
             };
-          }
+          },
         }),
 
         getWikiStats: tool({
@@ -1176,10 +983,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 "Keyword index (BM25) for exact matches",
                 "RRF fusion for optimal ranking",
                 "Per-request retrieval type override",
-                "Detailed scoring transparency"
-              ]
+                "Detailed scoring transparency",
+              ],
             };
-          }
+          },
         }),
 
         getActivityLog: tool({
@@ -1199,10 +1006,10 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 "lint",
                 "mcp_connect",
                 "mcp_disconnect",
-                "system"
+                "system",
               ])
               .optional()
-              .describe("Filter by activity type")
+              .describe("Filter by activity type"),
           }),
           execute: async ({ limit, type }) => {
             const activities = this.queryActivities(limit || 10, type);
@@ -1214,13 +1021,13 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 details: a.details,
                 timestamp: a.timestamp,
                 timeAgo: this.formatTimeAgo(a.timestamp),
-                metadata: a.metadata ? JSON.parse(a.metadata) : undefined
+                metadata: a.metadata ? JSON.parse(a.metadata) : undefined,
               })),
               total:
                 this.sql`SELECT COUNT(*) as count FROM activities`[0]?.count ||
-                0
+                0,
             };
-          }
+          },
         }),
 
         getAgentStatus: tool({
@@ -1240,19 +1047,19 @@ ${getSchedulePrompt({ date: new Date() })}`,
                 ? {
                     type: lastActivity.type,
                     subject: lastActivity.subject,
-                    timeAgo: this.formatTimeAgo(lastActivity.timestamp)
+                    timeAgo: this.formatTimeAgo(lastActivity.timestamp),
                   }
                 : null,
               scheduledTasks: schedules.length,
               upcomingTasks: schedules.slice(0, 5).map((s) => ({
                 id: s.id,
-                description: s.payload
-              }))
+                description: s.payload,
+              })),
             };
-          }
-        })
+          },
+        }),
       },
-      stopWhen: stepCountIs(10)
+      stopWhen: stepCountIs(10),
     });
 
     return result.toUIMessageStreamResponse();
@@ -1268,8 +1075,8 @@ ${getSchedulePrompt({ date: new Date() })}`,
       JSON.stringify({
         type: "scheduled-task",
         description,
-        timestamp: new Date().toISOString()
-      })
+        timestamp: new Date().toISOString(),
+      }),
     );
   }
 }
@@ -1291,22 +1098,22 @@ export default {
               "lintWiki",
               "getWikiStats",
               "getActivityLog",
-              "getAgentStatus"
+              "getAgentStatus",
             ],
             agentFeatures: [
               "Activity feed with real-time updates",
               "Agent status and presence",
               "Scheduled task tracking",
-              "Persistent activity logging"
+              "Persistent activity logging",
             ],
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           },
           null,
-          2
+          2,
         ),
         {
-          headers: { "Content-Type": "application/json" }
-        }
+          headers: { "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -1314,5 +1121,5 @@ export default {
       (await routeAgentRequest(request, env)) ||
       new Response("Not found", { status: 404 })
     );
-  }
+  },
 } satisfies ExportedHandler<Env>;

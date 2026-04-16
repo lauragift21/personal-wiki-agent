@@ -1,214 +1,179 @@
 # AI Search: The Search Primitive for Your Agents — Video Script
 
-**Blog:** BLOG-3240 — Search for your agents (hybrid search)  
-**Release Date:** Thursday, April 16th (Agents Week Day 4)  
-**Target:** Developers building AI agents  
-**Duration:** 60–90 seconds (optimized for Twitter/LinkedIn short)
 
 ---
 
 ## Video Title
 
-**"The Search Primitive Your AI Agents Need"**
+**"AI Search That Actually Finds What You Need"**
 
-_Alt: "Hybrid Search: Vector + Keyword = Agent Memory That Works"_
+_Alt: "Hybrid Search + Built-in Storage = Game Changer"_
 
 ---
 
-## Hook (0:00–0:12)
+## Hook (0:00–0:10)
 
-_[Open on a coding agent or chat interface failing to find context. Show text: "I don't have access to that information" or a generic response]_
+_[Open directly on the Search tab of your wiki agent. Type a query like "coffee brewing tips" or "fitness goals" — something relatable viewers can imagine searching in their own notes. Show results appearing instantly with the hybrid scores visible.]_
 
 **Speaker notes:**
-"Every agent needs search. Coding agents search repos. Support agents search tickets. Even an agent's memory is fundamentally search."
+"What if your search understood what you _meant_, not just what you _typed_?"
 
-_[Show messy architecture diagram: vector index + keyword index + fusion logic + per-agent setup]_
-"But building it yourself? Vector indexes, keyword indexes, fusion logic, per-agent setup..."
+_[Pause on the results showing vector_score, keyword_score, and fusion_method fields]_
 
-_[Cut to clean AI Search interface with instant results showing hybrid scores]_
-**Key line:** "AI Search is the plug-and-play primitive — now with hybrid retrieval."
+**Text on screen:** "Hybrid Search is here..."
 
 ---
 
-## Demo Part 1 — The Problem Hybrid Solves (0:12–0:30)
+## Demo Part 1 — The Problem (0:10–0:30)
 
-**On-screen:** Split screen showing two search failures:
-
-- Left: Vector search for "ERR_CONNECTION_REFUSED" returns generic networking docs
-- Right: Keyword search for "troubleshooting network connections" misses the concept
+**On-screen:** Switch to the Chat tab. Show a conversational query like "What were my productivity goals from last quarter?"
 
 **Speaker notes:**
-"Here's the problem. Vector search understands intent but loses specifics."
+"We all have this problem. You write something down — a journal entry, a note, a goal — and then you can never find it again."
 
-_[Show vector result missing the exact error code]_
-"Search for an error code? You get general networking docs, not the page with that exact string."
+"Keyword search? It only works if you remember the exact words. Vector search? Great for meaning, but misses exact matches."
 
-_[Show keyword result missing conceptual matches]_
-"Keyword search? Finds exact terms but misses related concepts."
+_[Switch back to Search tab, show the same query typed in the search box]_
 
-_[Both screens show partial/missing results]_
-"Your agents need both."
+"And don't get me started on the setup — R2 buckets, Vectorize indexes, sync pipelines..."
+
+_[Show a quick flash of complex infrastructure diagram, then cut back to clean UI]_
+"Hybrid search with built-in storage fixes all of that."
 
 ---
 
-## Demo Part 2 — Hybrid Search in Action (0:30–0:58)
+## Demo Part 2 — The Magic (0:30–0:55)
 
-**On-screen:** Execute hybrid search on your wiki agent. Show SearchResultCard with:
+**On-screen:** Execute the search. Zoom in on the SearchResultCard showing:
 
-- Matched text snippet
-- overall_score
-- vector_score (semantic similarity)
-- keyword_score (BM25 matching)
+- The matched text snippet
+- Overall score
+- Vector score (semantic similarity)
+- Keyword score (BM25 matching)
 - fusion_method: "rrf"
 
 **Speaker notes:**
-"Hybrid search runs vector and BM25 in parallel, then fuses results."
+"Watch what happens. The query gets two scores at once — vector for semantic meaning, keyword for exact term matches."
 
-_[Point to vector_score: ~0.85]_
-"Vector finds conceptually related content..."
+_[Point to the vector_score field]_
+"Vector search finds documents that are conceptually related..."
 
-_[Point to keyword_score: ~0.92]_
-"...BM25 catches exact error codes and specific terms..."
+_[Point to keyword_score]_
+"...while keyword search catches precise terms you actually wrote."
 
 _[Point to fusion_method: "rrf"]_
-"...and RRF — Reciprocal Rank Fusion — intelligently combines them by rank, not just averaging scores."
+"Then RRF fusion — Reciprocal Rank Fusion — intelligently combines both. You get the best of both worlds."
 
-_[Scroll through 2-3 results showing different distributions]_
-"See this? High vector score found the troubleshooting guide. High keyword score found the exact error page. Both surface when relevant."
-
----
-
-## Demo Part 3 — Built for Agents (0:58–1:20)
-
-**On-screen:** Show dynamic instance creation concept (text overlay or code snippet), then demonstrate:
-
-- Per-customer search instances
-- Cross-instance search
-- Built-in storage (no R2 setup)
-
-**Speaker notes:**
-"And it's built for multi-agent architectures."
-
-_[Show namespace with multiple instances: product-knowledge, customer-abc123, customer-def456]_
-"Create instances dynamically — one per agent, per customer, per tenant."
-
-_[Show cross-instance search query]_
-"Query across multiple instances in one call. Product docs AND customer history, fused together."
-
-_[Upload a document, immediate search]_
-"Built-in storage and indexing. Upload files directly — no R2 buckets to configure."
+_[Scroll through 2-3 results showing different score distributions — one with high vector score, one with high keyword score]_
+"See how different documents rank based on what makes them relevant?"
 
 ---
 
-## Explanation — The Tech (1:20–1:35)
+## Demo Part 3 — Built-in Storage (0:55–1:20)
 
-**On-screen:** Brief shot of Wrangler CLI command: `npx wrangler ai-search create my-search`
+**On-screen:** Show document ingestion. Drag and drop a file (markdown or text) into the chat interface. Show the "indexing" state, then switch to Search and query it immediately.
 
 **Speaker notes:**
-"Vector + keyword indexes. Porter stemmer for natural language. Trigram for code. Configurable fusion and reranking."
+"But here's what changes everything — built-in storage."
 
-_[Back to UI showing fast search]_
-"Metadata boosting, cross-instance search, and it's all serverless."
+_[Show file uploading, status changing to "indexed"]_
+"You no longer need to provision R2 buckets or Vectorize indexes to set up. With built-in storage all of this is handled for you and you can Just upload your file and it's immediately searchable."
+
+_[Type a query related to the uploaded document content, show instant results]_
+"The instance comes with its own storage and index. You can create one per agent, per customer, per project — dynamically, at runtime."
+
+_[Show multiple instances in a namespace]_
+"And you can query across all of them in a single call."
+
+---
+
+## Explanation — How It Works (1:20–1:35)
+
+**On-screen:** Brief shot of code or CLI showing the simplicity: `npx wrangler ai-search create my-search`
+
+**Speaker notes:**
+"This is Cloudflare AI Search — fully managed, serverless, zero infrastructure."
+
+_[Cut back to the Search tab showing multiple successful queries]_
+"Vector + keyword indexes. Automatic RRF fusion. Built-in storage. Dynamic instances. It's all just... there."
 
 _[Text overlay: "developers.cloudflare.com/ai-search"]_
-"Zero infrastructure. Just create, upload, and search."
+"Check the docs and start building."
 
 ---
 
 ## Recap + CTA (1:35–1:50)
 
-**On-screen:** End on hybrid search results showing both scores. Add Agents Week branding.
+**On-screen:** End on a clean search result showing a perfect match with both scores highlighted. Add Agents Week branding.
 
 **Speaker notes:**
-"AI Search with hybrid retrieval — launching today for Agents Week."
+"Hybrid search with built-in storage — live today as part of Agents Week."
 
-_[Text overlay: "AI Search | Hybrid Retrieval | Agents Week 2026"]_
-"Give your agents memory that actually works."
+_[Text overlay: "Cloudflare AI Search — Hybrid Retrieval + Built-in Storage"]_
+"No more setup headaches. Just search that works."
 
 _[Text overlay: `npx wrangler ai-search create my-search`]_
-"One command to get started. Check the docs and build something."
+"One command. Instant search. Go build something."
 
 ---
 
 ## What To Cut (If Running Long)
 
-- **Trim:** Tokenizer explanation (porter vs trigram) — save for blog
-- **Trim:** Multi-tenant architecture details — 10 seconds
-- **Keep:** Dual-score demonstration — this is the visual proof of hybrid search
-- **Keep:** Dynamic instance creation — shows it's built for agents
+- **Trim:** The multi-instance query section — keep it to single instance demo
+- **Trim:** The infrastructure complaint — just show the upload working
+- **Keep:** The dual-score demonstration — that's the visual hook
+- **Keep:** The "no R2, no Vectorize" moment — that's the built-in storage payoff
 
 ---
 
 ## On-Screen Callouts
 
-| Timestamp | What to Show             | Key Visual                                        |
-| --------- | ------------------------ | ------------------------------------------------- |
-| 0:00      | Failed agent response    | "I don't have that information"                   |
-| 0:08      | Complex DIY architecture | Multiple boxes: vector + keyword + fusion         |
-| 0:15      | Split screen failures    | Vector misses exact term / Keyword misses concept |
-| 0:32      | Hybrid search results    | vector_score + keyword_score + fusion_method: rrf |
-| 0:50      | Namespace with instances | product-knowledge, customer-abc123, etc.          |
-| 1:00      | Cross-instance search    | Query spanning multiple instances                 |
-| 1:35      | Final result + branding  | "Agents Week 2026" overlay                        |
-| 1:45      | CLI command              | `npx wrangler ai-search create my-search`         |
+| Timestamp | What to Show               | Key Visual                                        |
+| --------- | -------------------------- | ------------------------------------------------- |
+| 0:00      | Search tab, query typing   | Query + instant results                           |
+| 0:15      | Score breakdown            | vector_score, keyword_score, fusion_method fields |
+| 0:35      | Multiple results           | Different score distributions side-by-side        |
+| 0:55      | File upload                | Drag-and-drop into chat interface                 |
+| 1:00      | "Indexed" status           | File ready to search immediately                  |
+| 1:05      | Live search                | Query immediately finding uploaded content        |
+| 1:35      | Final result with branding | "Agents Week 2026" + CLI command                  |
 
 ---
 
-## Key Messaging (From BLOG-3240)
+## Key Points to Hit Naturally
 
-**Headline:** AI Search: the search primitive for your agents
-
-**Core Value Props:**
-
-1. **Hybrid search** — vector + BM25 in parallel, fused with RRF
-2. **Built-in storage** — no R2 setup, upload directly to instances
-3. **Dynamic instances** — create per agent/customer at runtime via namespace binding
-4. **Cross-instance search** — query multiple instances in one call
-5. **Metadata boosting** — surface recent docs, prioritize by custom fields
-6. **Zero infrastructure** — fully managed, serverless
-
-**Technical Highlights:**
-
-- Porter stemmer for natural language
-- Trigram tokenizer for code
-- RRF (Reciprocal Rank Fusion) not simple averaging
-- Optional reranking with cross-encoders
-- `ai_search_namespaces` binding for dynamic creation
-
-**Target Use Cases:**
-
-- Coding agents searching repos
-- Support agents with product docs + customer history
-- Multi-tenant RAG applications
-- Agent memory and conversation context
+1. **Hybrid search** — vector + keyword, not either/or
+2. **Built-in storage** — no R2, no Vectorize setup, just upload and go
+3. **Dynamic instances** — create per agent/customer at runtime
+4. **Zero infrastructure** — fully managed, serverless
 
 ---
 
 ## Analogy Bank
 
 **Concept:** Hybrid search combining vector + keyword
-**Analogy:** "Vector search is like asking someone about a movie and they describe the plot. Keyword search is like quoting a specific line. Hybrid search gives you both — the context AND the exact quote."
+**Analogy:** "It's like having a librarian who not only knows exactly which book you need by title, but also understands what you're looking for even when you can't remember the exact words."
+
+**Concept:** Built-in storage
+**Analogy:** "It's like the difference between buying a house that needs renovation versus one that's move-in ready. Built-in storage means you just... move in."
 
 **Concept:** RRF Fusion
-**Analogy:** "RRF is like a judge in a competition who ranks competitors by position rather than raw scores. It doesn't matter if one judge scored 95 and another 85 — what matters is who ranked first, second, third."
-
-**Concept:** Dynamic instances per agent
-**Analogy:** "Think of each AI Search instance like a filing cabinet. Old approach: everyone shares one giant cabinet. New approach: each agent gets their own cabinet, but you can still search across all of them at once when needed."
+**Analogy:** "Think of it like combining two expert opinions and weighting them based on confidence. The system doesn't just average the scores — it intelligently ranks based on what each method does best."
 
 ---
 
 ## Production Notes
 
-- **Thumbnail idea:** Split screen showing "Vector: 0.85 | Keyword: 0.92" with "RRF Fusion" in the middle, AI Search logo
-- **Background music:** Upbeat, modern tech (consistent with Agents Week)
-- **Pacing:** Quick cuts showing before/after (failed search → hybrid search success)
-- **Captions:** Highlight "hybrid search," "BM25," "RRF fusion," "vector + keyword," "per-agent instances"
+- **Thumbnail idea:** Split screen showing "Vector: 0.89 | Keyword: 0.95" scores with "Built-in Storage" badge and "Hybrid Search" text
+- **Background music:** Upbeat tech/ambient, not distracting
+- **Pacing:** Quick cuts between search results to show speed
+- **Captions:** Highlight "hybrid search," "vector + keyword," "RRF fusion," "built-in storage," "no setup"
 - **Platform optimization:**
-  - 9:16 for TikTok/Reels/Shorts
+  - 9:16 for TikTok/Reels
   - 1:1 for Twitter/LinkedIn
   - 16:9 for YouTube
 - **Branding:** Include "Agents Week 2026" badge in final 5 seconds
-- **CLI visibility:** Make the `npx wrangler ai-search create` command prominent in CTA
+- **CLI visibility:** Make the `npx wrangler ai-search create` command prominent
 
 ---
 
@@ -217,70 +182,45 @@ _[Text overlay: `npx wrangler ai-search create my-search`]_
 **Twitter/X:**
 
 ```
-Your AI agents need search that understands intent AND matches exact terms.
+Your AI agents deserve better memory.
 
-AI Search now supports hybrid retrieval:
-• Vector search for semantic meaning
-• BM25 for exact keyword matching
-• RRF fusion for intelligent ranking
-• Dynamic instances per agent/customer
+Hybrid search = vector understanding + keyword precision
+Built-in storage = zero infrastructure setup
 
-Launching today for #AgentsWeek
+Now live in Cloudflare AI Search as part of #AgentsWeek
 
-🎬 90 seconds to see it ↓
+🎬 90 seconds to see it in action ↓
 https://blog.cloudflare.com/ai-search-agent-primitive
 ```
 
 **LinkedIn:**
 
 ```
-The hardest part of building AI agents isn't the LLM — it's giving them reliable memory.
+The biggest problem with AI agent search? You spend more time setting up infrastructure than building your agent.
 
-Today we're launching hybrid search in Cloudflare AI Search as part of Agents Week 2026.
+Not anymore. Today we're launching hybrid search + built-in storage in Cloudflare AI Search — part of Agents Week 2026.
 
-What makes it different:
+What you get:
+✓ Hybrid retrieval (vector + BM25 + RRF fusion)
+✓ Built-in storage (no R2, no Vectorize setup)
+✓ Dynamic instances (create per agent/customer)
+✓ Query across instances in one call
 
-✓ Dual retrieval: Vector + BM25 run in parallel
-✓ Intelligent fusion: RRF ranking, not averaging
-✓ Dynamic instances: Create per-agent, per-customer at runtime
-✓ Cross-instance search: Query multiple knowledge bases at once
-✓ Built-in storage: Upload directly, no R2 configuration
+Your agents can now find information by meaning AND exact match — with zero infrastructure to manage.
 
-The support agent example in the blog searches both product documentation AND customer history in a single call — then saves resolutions for future context.
+Check the demo ↓
 
-That's the power of treating search as a primitive, not a project.
-
-Check the demo video ↓
-
-#AI #Cloudflare #AgentsWeek #MachineLearning #RAG
+#AI #Cloudflare #AgentsWeek #MachineLearning
 ```
 
 **BlueSky:**
 
 ```
-AI agents need search that gets both the big picture AND the details.
+AI search that understands meaning AND matches exact terms — with built-in storage so you skip the infrastructure setup.
 
-New in AI Search: hybrid retrieval with vector + BM25 + RRF fusion.
+Hybrid search is live in Cloudflare AI Search 🚀
 
-Create instances dynamically. Query across them. Built-in storage.
+Part of Agents Week 2026
 
-Part of Agents Week 🚀
-
-Demo + code: blog.cloudflare.com/ai-search-agent-primitive
+Demo: blog.cloudflare.com/ai-search-agent-primitive
 ```
-
----
-
-## Blog Alignment Checklist
-
-- [x] Headline matches blog title
-- [x] Hook references agent search problem from blog intro
-- [x] Hybrid search explanation matches technical section
-- [x] BM25 + vector + RRF mentioned correctly
-- [x] Dynamic instances via namespace binding shown
-- [x] Cross-instance search demonstrated
-- [x] Built-in storage (no R2) emphasized
-- [x] CLI command matches blog CTA
-- [x] Docs link matches blog
-- [x] Agents Week branding included
-- [x] Support agent example referenced

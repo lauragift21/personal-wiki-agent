@@ -21,12 +21,11 @@ import {
   PaperclipIcon,
   ImageIcon,
   MagnifyingGlassIcon,
-  BooksIcon,
-  MicrophoneIcon
+  MicrophoneIcon,
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
-import { ChatHistorySidebar } from "./components/ChatHistorySidebar";
+import { WikiLogo } from "./components/WikiLogo";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text"
+    "application/vnd.oasis.opendocument.text",
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -79,7 +78,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt"
+    odt: "odt",
   };
   return typeMap[extension || ""] || "document";
 }
@@ -91,7 +90,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document"
+    fileType: isImage ? "image" : "document",
   };
 }
 
@@ -108,7 +107,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark"
+    () => document.documentElement.getAttribute("data-mode") === "dark",
   );
 
   const toggle = useCallback(() => {
@@ -131,18 +130,9 @@ function ThemeToggle() {
   );
 }
 
-function _ConnectionIndicator({ connected }: { connected: boolean }) {
-  return (
-    <div className="flex items-center gap-2 text-sm text-[var(--color-warm-gray-500)]">
-      <span className={`connection-status ${connected ? "" : "offline"}`} />
-      <span>{connected ? "Connected" : "Offline"}</span>
-    </div>
-  );
-}
-
 function ToolPartView({
   part,
-  addToolApprovalResponse
+  addToolApprovalResponse,
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -239,10 +229,6 @@ function Chat() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
-  // Sidebar and session state
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -276,13 +262,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000
+              timeout: 5000,
             });
           }
         } catch {}
       },
-      [toasts]
-    )
+      [toasts],
+    ),
   });
 
   // Chat hook
@@ -293,7 +279,7 @@ function Chat() {
     setMessages,
     addToolApprovalResponse,
     stop,
-    status
+    status,
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -305,11 +291,11 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString()
-          }
+            localTime: new Date().toLocaleTimeString(),
+          },
         });
       }
-    }
+    },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -322,9 +308,9 @@ function Chat() {
     audioLevel,
     error: voiceError,
     start: startVoiceInput,
-    stop: stopVoiceInput
+    stop: stopVoiceInput,
   } = useVoiceInput({
-    agent: "VoiceChatAgent"
+    agent: "VoiceChatAgent",
   });
 
   // Update input when voice transcript changes
@@ -343,7 +329,7 @@ function Chat() {
       toasts.add({
         title: "Voice input error",
         description: voiceError,
-        timeout: 5000
+        timeout: 5000,
       });
     }
   }, [voiceError, toasts]);
@@ -358,81 +344,6 @@ function Chat() {
       textareaRef.current.focus();
     }
   }, [isStreaming]);
-
-  // Initialize session when agent connects - restore existing or create new
-  useEffect(() => {
-    if (connected && agent.stub && !currentSessionId) {
-      const initSession = async () => {
-        try {
-          console.log("[Init] Checking for existing sessions...");
-
-          // First, try to get the current session from the server
-          const currentSession = await agent.stub.getCurrentSession();
-
-          if (currentSession) {
-            console.log("[Init] Restored current session:", currentSession);
-            setCurrentSessionId(currentSession.id);
-            return;
-          }
-
-          // If no current session, check if there are any existing sessions
-          const sessionsResult = await agent.stub.listChatSessions(1);
-
-          if (sessionsResult.sessions.length > 0) {
-            // Use the most recent session
-            const mostRecentSession = sessionsResult.sessions[0];
-            console.log(
-              "[Init] Restoring most recent session:",
-              mostRecentSession
-            );
-            await agent.stub.setCurrentSession(mostRecentSession.id);
-            setCurrentSessionId(mostRecentSession.id);
-          } else {
-            // No existing sessions, create a new one
-            console.log("[Init] No existing sessions, creating new...");
-            const session = await agent.stub.createChatSession("New Chat");
-            console.log("[Init] New session created:", session);
-            setCurrentSessionId(session.id);
-          }
-        } catch (error) {
-          console.error("[Init] Failed to initialize session:", error);
-        }
-      };
-      initSession();
-    }
-  }, [connected, agent.stub, currentSessionId]);
-
-  // Listen for session changes and load messages
-  useEffect(() => {
-    if (!agent) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "session-changed" && data.messages) {
-          console.log("[Client] Loading messages for session:", data.messages);
-          // Convert loaded messages to UIMessage format
-          const loadedMessages = data.messages.map(
-            (msg: { role: string; content: string }) => ({
-              role: msg.role,
-              content: [{ type: "text", text: msg.content }],
-              parts: [{ type: "text", text: msg.content }]
-            })
-          );
-          setMessages(loadedMessages);
-        }
-      } catch (error) {
-        console.error("[Client] Failed to parse message:", error);
-      }
-    };
-
-    // The agent connection has a websocket, listen for messages
-    const ws = (agent as unknown as { connection?: WebSocket })?.connection;
-    if (ws) {
-      ws.addEventListener("message", handleMessage);
-      return () => ws.removeEventListener("message", handleMessage);
-    }
-  }, [agent, setMessages]);
 
   // Fetch search suggestions when search tab is opened
   useEffect(() => {
@@ -463,89 +374,17 @@ function Chat() {
     });
   }, []);
 
-  // Session management handlers
-  const handleNewChat = useCallback(async () => {
-    if (!connected || !agent.stub) {
-      console.error("[handleNewChat] Agent not connected", {
-        connected,
-        hasStub: !!agent.stub
-      });
-      toasts.add({
-        title: "Not connected",
-        description: "Please wait for connection...",
-        timeout: 3000
-      });
-      return;
-    }
-
-    try {
-      console.log("[handleNewChat] Creating new session...");
-      // Create a new session
-      const session = await agent.stub.createChatSession();
-      console.log("[handleNewChat] Session created:", session);
-      setCurrentSessionId(session.id);
-
-      // Clear current chat history
-      clearHistory();
-
-      // Switch to chat tab
-      setActiveTab("chat");
-    } catch (error) {
-      console.error("[handleNewChat] Failed to create new session:", error);
-      toasts.add({
-        title: "Failed to start new chat",
-        description:
-          error instanceof Error ? error.message : "Please try again",
-        timeout: 3000
-      });
-    }
-  }, [agent, clearHistory, setActiveTab, toasts, connected]);
-
-  const handleSessionSelect = useCallback(
-    async (sessionId: string) => {
-      if (!connected || !agent.stub || sessionId === currentSessionId) {
-        console.error("[handleSessionSelect] Cannot switch", {
-          connected,
-          hasStub: !!agent.stub,
-          sessionId,
-          currentSessionId
-        });
-        return;
-      }
-
-      try {
-        console.log("[handleSessionSelect] Switching to session:", sessionId);
-        // Set the current session on the server
-        const session = await agent.stub.setCurrentSession(sessionId);
-        if (session) {
-          setCurrentSessionId(sessionId);
-          setActiveTab("chat");
-          // Messages will be loaded via the session-changed broadcast
-        }
-      } catch (error) {
-        console.error("[handleSessionSelect] Failed to switch session:", error);
-        toasts.add({
-          title: "Failed to switch chat",
-          description:
-            error instanceof Error ? error.message : "Please try again",
-          timeout: 3000
-        });
-      }
-    },
-    [agent, currentSessionId, clearHistory, setActiveTab, toasts, connected]
-  );
-
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f)
+        (f) => f.type.startsWith("image/") || isDocumentFile(f),
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000
+          timeout: 5000,
         });
         return;
       }
@@ -576,11 +415,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000
+          timeout: 3000,
         });
       }
     },
-    [readFileAsText, toasts]
+    [readFileAsText, toasts],
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -610,7 +449,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles],
   );
 
   const send = useCallback(async () => {
@@ -632,7 +471,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri
+          url: dataUri,
         });
       } else if (att.fileType === "document") {
         // For text-based documents, include content in message for AI to ingest
@@ -677,7 +516,7 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10
+        10,
       );
       setSearchResults(result.results || []);
 
@@ -703,16 +542,6 @@ function Chat() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Chat History Sidebar */}
-      <ChatHistorySidebar
-        agent={agent}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        currentSessionId={currentSessionId}
-        onSessionSelect={handleSessionSelect}
-        onNewChat={handleNewChat}
-        connected={connected}
-      />
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Drag Overlay */}
@@ -746,9 +575,8 @@ function Chat() {
           <div className="max-w-3xl mx-auto flex items-center justify-between">
             {/* Logo - Fixed width */}
             <div className="flex items-center gap-3 w-[120px]">
-              <h1 className="text-xl font-semibold tracking-tight">
-                wiki-agent
-              </h1>
+              <WikiLogo size={36} />
+              <span className="text-xl font-semibold tracking-tight">wiki</span>
             </div>
 
             {/* Tabs - Prominent - Centered */}
@@ -785,18 +613,6 @@ function Chat() {
 
             {/* Controls */}
             <div className="flex items-center gap-3">
-              {/* <ConnectionIndicator connected={connected} /> */}
-              {/* <div className="flex items-center gap-2">
-              <BugIcon
-                size={14}
-                className="text-[var(--color-warm-gray-400)]"
-              />
-              <Switch
-                checked={showDebug}
-                onCheckedChange={setShowDebug}
-                size="sm"
-              />
-            </div> */}
               <ThemeToggle />
             </div>
           </div>
@@ -811,10 +627,7 @@ function Chat() {
                 {messages.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center max-w-md empty-calm">
-                      <BooksIcon
-                        size={48}
-                        className="mx-auto mb-4 opacity-50"
-                      />
+                      <WikiLogo size={48} className="mx-auto mb-4 opacity-50" />
                       <h2 className="text-2xl font-medium mb-2">
                         Start a conversation
                       </h2>
@@ -825,24 +638,24 @@ function Chat() {
                         {[
                           {
                             text: "Search my wiki",
-                            description: "Find anything in your knowledge base"
+                            description: "Find anything in your knowledge base",
                           },
                           {
                             text: "Save a journal entry",
                             description:
-                              "Record thoughts, reflections, or daily notes"
+                              "Record thoughts, reflections, or daily notes",
                           },
                           {
                             text: "Upload and index a document",
-                            description: "Add files to make them searchable"
-                          }
+                            description: "Add files to make them searchable",
+                          },
                         ].map((prompt) => (
                           <button
                             key={prompt.text}
                             onClick={() =>
                               sendMessage({
                                 role: "user",
-                                parts: [{ type: "text", text: prompt.text }]
+                                parts: [{ type: "text", text: prompt.text }],
                               })
                             }
                             disabled={isStreaming}
@@ -887,7 +700,7 @@ function Chat() {
                             .filter(
                               (part) =>
                                 part.type === "reasoning" &&
-                                (part as { text?: string }).text?.trim()
+                                (part as { text?: string }).text?.trim(),
                             )
                             .map((part, i) => {
                               const reasoning = part as {
@@ -931,7 +744,7 @@ function Chat() {
                           {message.parts
                             .filter(
                               (
-                                part
+                                part,
                               ): part is Extract<
                                 typeof part,
                                 { type: "file" }
@@ -939,7 +752,7 @@ function Chat() {
                                 part.type === "file" &&
                                 (
                                   part as { mediaType?: string }
-                                ).mediaType?.startsWith("image/") === true
+                                ).mediaType?.startsWith("image/") === true,
                             )
                             .map((part, i) => (
                               <div
@@ -1148,7 +961,7 @@ function Chat() {
               {!hasSearched ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <div className="text-center max-w-xl">
-                    <BooksIcon
+                    <WikiLogo
                       size={48}
                       className="mx-auto mb-6 text-[var(--color-warm-gray-300)]"
                     />
