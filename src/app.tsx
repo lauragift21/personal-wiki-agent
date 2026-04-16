@@ -604,7 +604,6 @@ function Chat() {
     // Process attachments
     const imageParts: Array<{ type: "file"; mediaType: string; url: string }> =
       [];
-    const textDocuments: Attachment[] = [];
 
     for (const att of attachments) {
       if (att.fileType === "image") {
@@ -616,9 +615,11 @@ function Chat() {
           url: dataUri
         });
       } else if (att.fileType === "document") {
-        // For text-based documents, ingest directly via RPC first
+        // For text-based documents, include content in message for AI to ingest
         if (att.content) {
-          textDocuments.push(att);
+          const docType = getDocumentType(att.file);
+          messageText += messageText ? "\n\n" : "";
+          messageText += `---\n**Document: ${att.file.name}** (Type: ${docType})\n\n${att.content}\n---`;
         } else {
           // Binary documents - just mention them in the message
           const docType = getDocumentType(att.file);
@@ -628,29 +629,8 @@ function Chat() {
       }
     }
 
-    // Ingest text documents directly via RPC
-    for (const doc of textDocuments) {
-      try {
-        const result = await agent.stub.ingestFile(
-          doc.file.name,
-          doc.content || "",
-          doc.file.type || "text/plain",
-          "note"
-        );
-
-        if (result.success) {
-          messageText += messageText ? "\n\n" : "";
-          messageText += `---\n**Document ingested: ${doc.file.name}**\nThe document has been indexed and is now searchable.\n---`;
-        } else {
-          messageText += messageText ? "\n\n" : "";
-          messageText += `---\n**Document: ${doc.file.name}**\nFailed to ingest: ${result.error || "Unknown error"}\n---`;
-        }
-      } catch (error) {
-        console.error("Failed to ingest file:", error);
-        messageText += messageText ? "\n\n" : "";
-        messageText += `---\n**Document: ${doc.file.name}**\nNote: ${doc.content || "Content not available"}\n---`;
-      }
-    }
+    // Note: Text documents are ingested by the AI via the ingestDocument tool
+    // when it sees the document content in the message above
 
     const parts: Array<
       | { type: "text"; text: string }
