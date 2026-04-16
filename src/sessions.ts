@@ -24,14 +24,11 @@ export interface ChatSessionWithMessages extends ChatSession {
 }
 
 /**
- * Agent interface with sql method - pass the agent instance to maintain 'this' binding
+ * Agent with sql method - we pass the agent instance directly to maintain 'this' binding
+ * The sql method needs the agent context, so we pass 'this' from the Agent class
  */
-interface AgentWithSql {
-  sql: (
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ) => Array<Record<string, unknown>>;
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AgentWithSql = any;
 
 /**
  * Create the sessions table if it doesn't exist

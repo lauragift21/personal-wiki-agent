@@ -21,6 +21,7 @@ import {
   renameSession,
   deleteSession,
   searchSessions,
+  updateSessionAfterMessage,
   formatTimeAgo as formatSessionTimeAgo,
   type ChatSession
 } from "./sessions";
@@ -114,6 +115,9 @@ export class ChatAgent extends AIChatAgent<Env> {
     // Initialize AI Search wiki
     await this.initializeWiki();
 
+    // Initialize sessions table and restore current session
+    await this.initializeSessionState();
+
     // Log system startup
     await this.logActivity(
       "system",
@@ -123,6 +127,32 @@ export class ChatAgent extends AIChatAgent<Env> {
 
     // Broadcast agent ready state
     this.broadcastAgentStatus("ready");
+  }
+
+  // Initialize session state on startup
+  private async initializeSessionState() {
+    if (!this.sessionsInitialized) {
+      console.log("[initializeSessionState] Initializing sessions table...");
+      initializeSessionsTable(this);
+      this.sessionsInitialized = true;
+    }
+
+    // Try to restore the most recent session
+    const sessions = listSessions(this, 1);
+    if (sessions.length > 0) {
+      const mostRecent = sessions[0];
+      console.log(
+        "[initializeSessionState] Restoring most recent session:",
+        mostRecent.id,
+        mostRecent.name
+      );
+      this.currentSessionId = mostRecent.id;
+    } else {
+      console.log(
+        "[initializeSessionState] No existing sessions, starting fresh"
+      );
+      this.currentSessionId = null;
+    }
   }
 
   // Initialize SQLite tables for agent features
@@ -447,11 +477,11 @@ export class ChatAgent extends AIChatAgent<Env> {
     total: number;
   }> {
     if (!this.sessionsInitialized) {
-      initializeSessionsTable(this.sql);
+      initializeSessionsTable(this);
       this.sessionsInitialized = true;
     }
 
-    const sessions = listSessions(this.sql, limit ?? 50);
+    const sessions = listSessions(this, limit ?? 50);
     const total = this.sql`SELECT COUNT(*) as count FROM chat_sessions`[0]
       ?.count as number;
 
@@ -471,7 +501,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     try {
       if (!this.sessionsInitialized) {
         console.log("[createChatSession] Initializing sessions table...");
-        initializeSessionsTable(this.sql);
+        initializeSessionsTable(this);
         this.sessionsInitialized = true;
       }
 
@@ -481,7 +511,7 @@ export class ChatAgent extends AIChatAgent<Env> {
         sessionName
       );
 
-      const session = createSession(this.sql, sessionName);
+      const session = createSession(this, sessionName);
       console.log("[createChatSession] Session created:", session);
 
       this.currentSessionId = session.id;
@@ -504,12 +534,12 @@ export class ChatAgent extends AIChatAgent<Env> {
   @callable()
   async getCurrentSession(): Promise<ChatSession | null> {
     if (!this.currentSessionId) return null;
-    return getSession(this.sql, this.currentSessionId);
+    return getSession(this, this.currentSessionId);
   }
 
   @callable()
   async setCurrentSession(sessionId: string): Promise<ChatSession | null> {
-    const session = getSession(this.sql, sessionId);
+    const session = getSession(this, sessionId);
     if (session) {
       this.currentSessionId = sessionId;
       this.broadcast(
@@ -527,12 +557,12 @@ export class ChatAgent extends AIChatAgent<Env> {
     sessionId: string,
     newName: string
   ): Promise<boolean> {
-    return renameSession(this.sql, sessionId, newName);
+    return renameSession(this, sessionId, newName);
   }
 
   @callable()
   async deleteChatSession(sessionId: string): Promise<boolean> {
-    const success = deleteSession(this.sql, sessionId);
+    const success = deleteSession(this, sessionId);
     if (success && this.currentSessionId === sessionId) {
       this.currentSessionId = null;
     }
@@ -543,7 +573,7 @@ export class ChatAgent extends AIChatAgent<Env> {
   async searchChatSessions(
     query: string
   ): Promise<Array<ChatSession & { timeAgo: string }>> {
-    const sessions = searchSessions(this.sql, query);
+    const sessions = searchSessions(this, query);
     return sessions.map((s) => ({
       ...s,
       timeAgo: formatSessionTimeAgo(s.lastMessageAt)
@@ -923,43 +953,52 @@ ${getSchedulePrompt({ date: new Date() })}`,
               return { error: "Wiki not initialized" };
             }
 
-            try {
-              const now = Date.now();
-              const docId = `${docType}-${now}.md`;
+            const now = Date.now();
+            const docId = `${docType}-${now}.md`;
 
-              const metadata: Record<string, string> = {
-                category: docType,
-                title: title,
-                tags: tags ? tags.join(", ") : "",
-                createdAt: String(now),
-                source: "ingest"
-              };
+            const metadata: Record<string, string> = {
+              category: docType,
+              title: title,
+              tags: tags ? tags.join(", ") : "",
+              createdAt: String(now),
+              source: "ingest"
+            };
 
-              await uploadDocument(this.instance, docId, content, metadata);
-              await this.updateLog(
-                "ingest",
-                title,
-                `Added ${docType} document to wiki`,
-                {
-                  docId,
-                  docType,
-                  tags: tags || []
-                }
-              );
+            // Fire-and-forget upload - return immediately
+            // The upload happens in the background
+            uploadDocument(this.instance, docId, content, metadata)
+              .then(() => {
+                this.updateLog(
+                  "ingest",
+                  title,
+                  `Added ${docType} document to wiki`,
+                  {
+                    docId,
+                    docType,
+                    tags: tags || []
+                  }
+                );
+                console.log(
+                  "[ingestDocument] Background upload completed:",
+                  docId
+                );
+              })
+              .catch((error) => {
+                console.error(
+                  "[ingestDocument] Background upload failed:",
+                  error
+                );
+              });
 
-              return {
-                success: true,
-                message: `Successfully ingested "${title}" as ${docType}. Document ID: ${docId}`,
-                docId,
-                searchable: true,
-                method: "hybrid (vector + keyword with RRF fusion)"
-              };
-            } catch (error) {
-              return {
-                error: "Failed to upload document",
-                details: String(error)
-              };
-            }
+            // Return immediately - don't wait for upload
+            return {
+              success: true,
+              message: `Uploading "${title}" as ${docType}... The document will be available for search shortly.`,
+              docId,
+              status: "uploading",
+              searchable: false,
+              method: "hybrid (vector + keyword with RRF fusion)"
+            };
           }
         }),
 

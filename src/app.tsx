@@ -252,7 +252,6 @@ function Chat() {
 
   // Agent setup with reconnection
   const [_reconnectAttempt, setReconnectAttempt] = useState(0);
-  const [agentReady, setAgentReady] = useState(false);
 
   const agent = useAgent<ChatAgent>({
     agent: "ChatAgent",
@@ -260,16 +259,10 @@ function Chat() {
       console.log("[WebSocket] Connected");
       setConnected(true);
       setReconnectAttempt(0);
-      // Small delay to ensure stub is ready
-      setTimeout(() => {
-        console.log("[Agent] Stub available:", !!agent.stub);
-        setAgentReady(!!agent.stub);
-      }, 100);
     }, []),
     onClose: useCallback((event: CloseEvent) => {
       console.log("[WebSocket] Closed:", event.code, event.reason);
       setConnected(false);
-      setAgentReady(false);
     }, []),
     onError: useCallback((error: Event) => {
       console.error("[WebSocket] Error:", error);
@@ -366,17 +359,43 @@ function Chat() {
     }
   }, [isStreaming]);
 
-  // Initialize first session when agent connects
+  // Initialize session when agent connects - restore existing or create new
   useEffect(() => {
     if (connected && agent.stub && !currentSessionId) {
       const initSession = async () => {
         try {
-          console.log("[Init] Creating initial session...");
-          const session = await agent.stub.createChatSession("New Chat");
-          console.log("[Init] Initial session created:", session);
-          setCurrentSessionId(session.id);
+          console.log("[Init] Checking for existing sessions...");
+
+          // First, try to get the current session from the server
+          const currentSession = await agent.stub.getCurrentSession();
+
+          if (currentSession) {
+            console.log("[Init] Restored current session:", currentSession);
+            setCurrentSessionId(currentSession.id);
+            return;
+          }
+
+          // If no current session, check if there are any existing sessions
+          const sessionsResult = await agent.stub.listChatSessions(1);
+
+          if (sessionsResult.sessions.length > 0) {
+            // Use the most recent session
+            const mostRecentSession = sessionsResult.sessions[0];
+            console.log(
+              "[Init] Restoring most recent session:",
+              mostRecentSession
+            );
+            await agent.stub.setCurrentSession(mostRecentSession.id);
+            setCurrentSessionId(mostRecentSession.id);
+          } else {
+            // No existing sessions, create a new one
+            console.log("[Init] No existing sessions, creating new...");
+            const session = await agent.stub.createChatSession("New Chat");
+            console.log("[Init] New session created:", session);
+            setCurrentSessionId(session.id);
+          }
         } catch (error) {
-          console.error("[Init] Failed to create initial session:", error);
+          console.error("[Init] Failed to initialize session:", error);
         }
       };
       initSession();
@@ -1098,11 +1117,11 @@ function Chat() {
                       />
                       {/* Interim transcription overlay */}
                       {isListening && voiceInterimTranscript && (
-                        <div className="absolute inset-0 px-4 py-3 pointer-events-none text-[var(--color-warm-gray-400)] flex items-center">
+                        <div className="absolute inset-0 px-4 py-3 pointer-events-none bg-[var(--color-cream)] text-[var(--color-warm-gray-800)] flex items-center rounded-lg">
                           <span className="truncate">
                             {voiceInterimTranscript}
                           </span>
-                          <span className="inline-block w-0.5 h-5 bg-[var(--color-warm-gray-400)] ml-1 animate-pulse" />
+                          <span className="inline-block w-0.5 h-5 bg-[var(--color-warm-gray-800)] ml-1 animate-pulse" />
                         </div>
                       )}
                     </div>
