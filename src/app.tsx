@@ -21,7 +21,7 @@ import {
   PaperclipIcon,
   ImageIcon,
   MagnifyingGlassIcon,
-  MicrophoneIcon,
+  MicrophoneIcon
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
@@ -61,7 +61,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.text"
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -78,7 +78,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt",
+    odt: "odt"
   };
   return typeMap[extension || ""] || "document";
 }
@@ -90,7 +90,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document",
+    fileType: isImage ? "image" : "document"
   };
 }
 
@@ -107,7 +107,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark",
+    () => document.documentElement.getAttribute("data-mode") === "dark"
   );
 
   const toggle = useCallback(() => {
@@ -132,7 +132,7 @@ function ThemeToggle() {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse,
+  addToolApprovalResponse
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -262,13 +262,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000,
+              timeout: 5000
             });
           }
         } catch {}
       },
-      [toasts],
-    ),
+      [toasts]
+    )
   });
 
   // Chat hook
@@ -279,7 +279,7 @@ function Chat() {
     setMessages,
     addToolApprovalResponse,
     stop,
-    status,
+    status
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -291,11 +291,11 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString(),
-          },
+            localTime: new Date().toLocaleTimeString()
+          }
         });
       }
-    },
+    }
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -308,9 +308,9 @@ function Chat() {
     audioLevel,
     error: voiceError,
     start: startVoiceInput,
-    stop: stopVoiceInput,
+    stop: stopVoiceInput
   } = useVoiceInput({
-    agent: "VoiceChatAgent",
+    agent: "VoiceChatAgent"
   });
 
   // Update input when voice transcript changes
@@ -329,7 +329,7 @@ function Chat() {
       toasts.add({
         title: "Voice input error",
         description: voiceError,
-        timeout: 5000,
+        timeout: 5000
       });
     }
   }, [voiceError, toasts]);
@@ -377,14 +377,14 @@ function Chat() {
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f),
+        (f) => f.type.startsWith("image/") || isDocumentFile(f)
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000,
+          timeout: 5000
         });
         return;
       }
@@ -415,11 +415,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000,
+          timeout: 3000
         });
       }
     },
-    [readFileAsText, toasts],
+    [readFileAsText, toasts]
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -449,7 +449,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles],
+    [addFiles]
   );
 
   const send = useCallback(async () => {
@@ -471,7 +471,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri,
+          url: dataUri
         });
       } else if (att.fileType === "document") {
         // For text-based documents, include content in message for AI to ingest
@@ -516,7 +516,7 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10,
+        10
       );
       setSearchResults(result.results || []);
 
@@ -638,24 +638,24 @@ function Chat() {
                         {[
                           {
                             text: "Search my wiki",
-                            description: "Find anything in your knowledge base",
+                            description: "Find anything in your knowledge base"
                           },
                           {
                             text: "Save a journal entry",
                             description:
-                              "Record thoughts, reflections, or daily notes",
+                              "Record thoughts, reflections, or daily notes"
                           },
                           {
                             text: "Upload and index a document",
-                            description: "Add files to make them searchable",
-                          },
+                            description: "Add files to make them searchable"
+                          }
                         ].map((prompt) => (
                           <button
                             key={prompt.text}
                             onClick={() =>
                               sendMessage({
                                 role: "user",
-                                parts: [{ type: "text", text: prompt.text }],
+                                parts: [{ type: "text", text: prompt.text }]
                               })
                             }
                             disabled={isStreaming}
@@ -700,7 +700,7 @@ function Chat() {
                             .filter(
                               (part) =>
                                 part.type === "reasoning" &&
-                                (part as { text?: string }).text?.trim(),
+                                (part as { text?: string }).text?.trim()
                             )
                             .map((part, i) => {
                               const reasoning = part as {
@@ -744,7 +744,7 @@ function Chat() {
                           {message.parts
                             .filter(
                               (
-                                part,
+                                part
                               ): part is Extract<
                                 typeof part,
                                 { type: "file" }
@@ -752,7 +752,7 @@ function Chat() {
                                 part.type === "file" &&
                                 (
                                   part as { mediaType?: string }
-                                ).mediaType?.startsWith("image/") === true,
+                                ).mediaType?.startsWith("image/") === true
                             )
                             .map((part, i) => (
                               <div

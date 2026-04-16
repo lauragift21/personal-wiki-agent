@@ -1,6 +1,5 @@
 # AI Search: The Search Primitive for Your Agents — Video Script
 
-
 ---
 
 ## Video Title
