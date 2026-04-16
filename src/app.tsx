@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useState, useEffect, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
+import { useVoiceAgent } from "@cloudflare/voice/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { MCPServersState } from "agents";
 import type { ChatAgent } from "./server";
@@ -23,8 +24,13 @@ import {
   PaperclipIcon,
   ImageIcon,
   MagnifyingGlassIcon,
-  BooksIcon
+  BooksIcon,
+  MicrophoneIcon,
+  PhoneSlashIcon,
+  PhoneIcon,
 } from "@phosphor-icons/react";
+import { SearchResultCard } from "./components/SearchResultCard";
+import { SearchSkeleton } from "./components/SearchSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -60,7 +66,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text"
+    "application/vnd.oasis.opendocument.text",
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -77,7 +83,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt"
+    odt: "odt",
   };
   return typeMap[extension || ""] || "document";
 }
@@ -89,7 +95,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document"
+    fileType: isImage ? "image" : "document",
   };
 }
 
@@ -106,7 +112,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark"
+    () => document.documentElement.getAttribute("data-mode") === "dark",
   );
 
   const toggle = useCallback(() => {
@@ -140,7 +146,7 @@ function ConnectionIndicator({ connected }: { connected: boolean }) {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse
+  addToolApprovalResponse,
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -234,8 +240,11 @@ function Chat() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [searchDebug, setSearchDebug] = useState<string[]>([]);
-  const [showSearchDebug, setShowSearchDebug] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+  // Voice state
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -270,13 +279,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000
+              timeout: 5000,
             });
           }
         } catch {}
       },
-      [toasts]
-    )
+      [toasts],
+    ),
   });
 
   // Chat hook
@@ -286,7 +295,7 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status
+    status,
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -298,11 +307,11 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString()
-          }
+            localTime: new Date().toLocaleTimeString(),
+          },
         });
       }
-    }
+    },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -318,6 +327,25 @@ function Chat() {
     }
   }, [isStreaming]);
 
+  // Fetch search suggestions when search tab is opened
+  useEffect(() => {
+    if (activeTab === "search" && connected && agent.stub) {
+      const fetchSuggestions = async () => {
+        setIsLoadingSuggestions(true);
+        try {
+          const suggestions = await agent.stub.getSearchSuggestions();
+          setSearchSuggestions(suggestions);
+        } catch (error) {
+          console.error("[Search] Failed to fetch suggestions:", error);
+          setSearchSuggestions([]);
+        } finally {
+          setIsLoadingSuggestions(false);
+        }
+      };
+      fetchSuggestions();
+    }
+  }, [activeTab, connected, agent]);
+
   // Handlers
   const readFileAsText = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -331,14 +359,14 @@ function Chat() {
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f)
+        (f) => f.type.startsWith("image/") || isDocumentFile(f),
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000
+          timeout: 5000,
         });
         return;
       }
@@ -369,11 +397,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000
+          timeout: 3000,
         });
       }
     },
-    [readFileAsText, toasts]
+    [readFileAsText, toasts],
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -403,7 +431,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles],
   );
 
   const send = useCallback(async () => {
@@ -426,7 +454,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri
+          url: dataUri,
         });
       } else if (att.fileType === "document") {
         // For text-based documents, ingest directly via RPC first
@@ -448,7 +476,7 @@ function Chat() {
           doc.file.name,
           doc.content || "",
           doc.file.type || "text/plain",
-          "note"
+          "note",
         );
 
         if (result.success) {
@@ -486,32 +514,17 @@ function Chat() {
     if (!searchQuery.trim() || !connected) return;
     setIsSearching(true);
     setHasSearched(true);
-    const debug: string[] = [];
-    debug.push(`[Search] Query: "${searchQuery.trim()}"`);
-    debug.push(`[Search] Connected: ${connected}`);
-    debug.push(`[Search] Agent stub: ${!!agent.stub}`);
     try {
-      debug.push("[Search] Calling agent.stub.queryWiki...");
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10
+        10,
       );
-      debug.push(
-        `[Search] Response received: ${JSON.stringify(result, null, 2)}`
-      );
-      debug.push(`[Search] Total results: ${result.totalResults}`);
-      debug.push(`[Search] Results count: ${result.results?.length || 0}`);
-      if (result.error) {
-        debug.push(`[Search] ERROR: ${result.error}`);
-      }
       setSearchResults(result.results || []);
     } catch (error) {
-      debug.push(`[Search] EXCEPTION: ${error}`);
       console.error("[Search] Failed:", error);
       setSearchResults([]);
     } finally {
-      setSearchDebug(debug);
       setIsSearching(false);
     }
   }, [searchQuery, connected, agent]);
@@ -591,8 +604,8 @@ function Chat() {
 
           {/* Controls */}
           <div className="flex items-center gap-3">
-            <ConnectionIndicator connected={connected} />
-            <div className="flex items-center gap-2">
+            {/* <ConnectionIndicator connected={connected} /> */}
+            {/* <div className="flex items-center gap-2">
               <BugIcon
                 size={14}
                 className="text-[var(--color-warm-gray-400)]"
@@ -602,7 +615,7 @@ function Chat() {
                 onCheckedChange={setShowDebug}
                 size="sm"
               />
-            </div>
+            </div> */}
             <ThemeToggle />
             <button
               onClick={clearHistory}
@@ -636,14 +649,14 @@ function Chat() {
                         "Journal today's insights",
                         "Find my notes on ML",
                         "Ingest an article",
-                        "What did I learn last week?"
+                        "What did I learn last week?",
                       ].map((prompt) => (
                         <button
                           key={prompt}
                           onClick={() =>
                             sendMessage({
                               role: "user",
-                              parts: [{ type: "text", text: prompt }]
+                              parts: [{ type: "text", text: prompt }],
                             })
                           }
                           disabled={isStreaming}
@@ -687,7 +700,7 @@ function Chat() {
                           .filter(
                             (part) =>
                               part.type === "reasoning" &&
-                              (part as { text?: string }).text?.trim()
+                              (part as { text?: string }).text?.trim(),
                           )
                           .map((part, i) => {
                             const reasoning = part as {
@@ -726,12 +739,12 @@ function Chat() {
                         {message.parts
                           .filter(
                             (
-                              part
+                              part,
                             ): part is Extract<typeof part, { type: "file" }> =>
                               part.type === "file" &&
                               (
                                 part as { mediaType?: string }
-                              ).mediaType?.startsWith("image/") === true
+                              ).mediaType?.startsWith("image/") === true,
                           )
                           .map((part, i) => (
                             <div
@@ -830,11 +843,11 @@ function Chat() {
                   </div>
                 )}
 
-                <div className="flex items-end gap-2 p-2">
+                <div className="flex items-center gap-2 p-2">
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={!connected || isStreaming}
-                    className="p-3 mb-0.5 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors self-end"
+                    className="p-3 rounded-lg hover:bg-[var(--color-warm-gray-100)] text-[var(--color-warm-gray-500)] transition-colors flex items-center justify-center"
                   >
                     <PaperclipIcon size={20} />
                   </button>
@@ -934,7 +947,7 @@ function Chat() {
                       "machine learning",
                       "journal entries",
                       "project notes",
-                      "meeting summaries"
+                      "meeting summaries",
                     ].map((suggestion) => (
                       <button
                         key={suggestion}
@@ -984,34 +997,17 @@ function Chat() {
                 </div>
 
                 {/* Results */}
-                <div className="flex items-center gap-3 mb-4">
+                <div className="mb-4">
                   <span className="text-sm text-[var(--color-warm-gray-600)]">
                     {searchResults.length} result
                     {searchResults.length !== 1 ? "s" : ""}
                   </span>
-                  <button
-                    onClick={() => setShowSearchDebug(!showSearchDebug)}
-                    className="text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] opacity-30 hover:opacity-100 transition-opacity"
-                    title="Toggle debug info"
-                  >
-                    [debug]
-                  </button>
                 </div>
 
-                {/* Debug Panel */}
-                {showSearchDebug && searchDebug.length > 0 && (
-                  <div className="mb-4 p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]">
-                    <div className="text-xs font-medium mb-2 text-[var(--text-secondary)]">
-                      Debug Info:
-                    </div>
-                    <pre className="text-[10px] text-[var(--text-tertiary)] overflow-auto max-h-32 font-mono whitespace-pre-wrap">
-                      {searchDebug.join("\n")}
-                    </pre>
-                  </div>
-                )}
-
                 <div className="flex-1 overflow-y-auto space-y-3">
-                  {searchResults.length === 0 ? (
+                  {isSearching ? (
+                    <SearchSkeleton count={3} />
+                  ) : searchResults.length === 0 ? (
                     <div className="text-center py-12 text-[var(--color-warm-gray-400)]">
                       <MagnifyingGlassIcon
                         size={48}
@@ -1021,23 +1017,11 @@ function Chat() {
                     </div>
                   ) : (
                     searchResults.map((result, index) => (
-                      <div
+                      <SearchResultCard
                         key={result.id}
-                        className="result-item p-5 animate-fade-in"
-                        style={{ animationDelay: `${index * 50}ms` }}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="text-sm text-[var(--color-warm-gray-500)] font-mono">
-                            {result.source}
-                          </span>
-                          <span className="score-badge">
-                            {(result.overallScore * 100).toFixed(0)}% match
-                          </span>
-                        </div>
-                        <p className="text-[var(--color-warm-gray-700)] leading-relaxed whitespace-pre-wrap">
-                          {result.text}
-                        </p>
-                      </div>
+                        result={result}
+                        index={index}
+                      />
                     ))
                   )}
                 </div>
