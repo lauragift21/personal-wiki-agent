@@ -11,113 +11,11 @@ import {
   type ModelMessage,
 } from "ai";
 import { z } from "zod";
+import { searchWiki, uploadDocument, listDocuments } from "./ai-search";
+import { VoiceChatAgent } from "./voice-agent";
 
-// AI Search helper functions
-async function searchWiki(
-  instance: AiSearchInstance,
-  query: string,
-  options: {
-    retrievalType?: "vector" | "keyword" | "hybrid";
-    maxResults?: number;
-  } = {},
-) {
-  console.log("[searchWiki] Searching for:", query);
-  console.log("[searchWiki] Options:", options);
-
-  try {
-    const result = await instance.search({
-      messages: [{ role: "user", content: query }],
-      ai_search_options: {
-        retrieval: {
-          retrieval_type: options.retrievalType || "hybrid",
-          fusion_method: "rrf",
-          match_threshold: 0.4,
-          max_num_results: options.maxResults || 10,
-        },
-        reranking: {
-          enabled: true,
-          model: "@cf/baai/bge-reranker-base",
-        },
-      },
-    });
-
-    console.log(
-      "[searchWiki] Search successful, found",
-      result.chunks?.length || 0,
-      "chunks",
-    );
-    return result;
-  } catch (error) {
-    console.error("[searchWiki] Search failed:", error);
-    throw error;
-  }
-}
-
-async function uploadDocument(
-  instance: AiSearchInstance,
-  key: string,
-  content: string,
-  metadata?: Record<string, unknown>,
-) {
-  // AI Search requires ALL metadata values to be strings
-  const stringMetadata: Record<string, string> = {};
-  if (metadata) {
-    for (const [k, v] of Object.entries(metadata)) {
-      stringMetadata[k] = String(v);
-    }
-  }
-  stringMetadata.uploaded_at = String(Date.now());
-
-  console.log("[uploadDocument] Starting upload for:", key);
-  console.log("[uploadDocument] Content length:", content.length);
-
-  try {
-    // Use regular upload (uploadAndPoll has issues with gzip responses in local dev)
-    const result = await instance.items.upload(key, content, {
-      metadata: stringMetadata,
-    });
-    console.log("[uploadDocument] Upload SUCCESS:", key);
-    // Wait a bit for indexing to start
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    return { ...result, status: "queued" };
-  } catch (uploadError) {
-    console.error("[uploadDocument] Upload failed:", uploadError);
-    throw uploadError;
-  }
-}
-
-async function listDocuments(instance: AiSearchInstance) {
-  const result = await instance.items.list();
-  return result.result || [];
-}
-
-async function getDocument(
-  instance: AiSearchInstance,
-  key: string,
-): Promise<string | null> {
-  try {
-    const item = instance.items.get(key);
-    const result = await item.download();
-    if (!result || !result.body) return null;
-
-    // Read the stream into a string
-    const reader = result.body.getReader();
-    const decoder = new TextDecoder();
-    let content = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      content += decoder.decode(value, { stream: true });
-    }
-    content += decoder.decode();
-
-    return content;
-  } catch (error) {
-    // Document doesn't exist - return null
-    return null;
-  }
-}
+// Re-export VoiceChatAgent so it can be instantiated by the router
+export { VoiceChatAgent };
 
 /**
  * The AI SDK's downloadAssets step runs `new URL(data)` on every file
@@ -362,8 +260,6 @@ export class ChatAgent extends AIChatAgent<Env> {
         hybrid: info.index_method,
       });
 
-      await this.createDefaultWikiStructure();
-
       this.initialized = true;
       console.log(`[Wiki] Wiki initialized successfully`);
     } catch (error) {
@@ -373,54 +269,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     }
   }
 
-  // Create default wiki pages
-  private async createDefaultWikiStructure() {
-    if (!this.instance) return;
-
-    const now = Date.now();
-
-    const existingIndex = await getDocument(this.instance, "index.md");
-    if (existingIndex) return;
-
-    await uploadDocument(
-      this.instance,
-      "index.md",
-      `# Personal Wiki Index
-
-## Overview
-This is your personal wiki agent with **hybrid search** (vector + keyword with RRF fusion).
-
-## How It Works
-1. **Ingest** documents using the "/ingest" command
-2. **Search** your knowledge base with the "/search" command
-3. **Ask questions** - I'll search your wiki and cite sources
-
-## Search Methods
-- **Vector**: Semantic similarity (finds conceptually related content)
-- **Keyword**: BM25 exact matching (finds precise term matches)
-- **Hybrid**: Combines both with RRF fusion (recommended)
-
----
-*Initialized: ${new Date(now).toLocaleString()}*`,
-      { category: "index", title: "Index" },
-    );
-
-    await uploadDocument(
-      this.instance,
-      "log.md",
-      `# Wiki Activity Log
-
-## [${new Date(now).toISOString()}] init | Wiki Created
-- Initialized personal wiki with hybrid search (vector + keyword with RRF fusion)
-- AI Search instance created
-
----
-`,
-      { category: "log", title: "Activity Log" },
-    );
-  }
-
-  // Update the activity log (both markdown and SQLite)
+  // Update the activity log (SQLite only)
   private async updateLog(
     operation: ActivityType,
     subject: string,
@@ -430,28 +279,8 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     try {
       // Log to SQLite for real-time feed
       await this.logActivity(operation, subject, details, metadata);
-
-      // Also update markdown log if instance available
-      if (!this.instance) return;
-
-      try {
-        const existingLog = await getDocument(this.instance, "log.md");
-        const entry = `\n## [${new Date().toISOString()}] ${operation} | ${subject}\n- ${details}\n`;
-
-        const newLog = existingLog
-          ? existingLog + entry
-          : `# Wiki Activity Log\n${entry}`;
-
-        await uploadDocument(this.instance, "log.md", newLog, {
-          category: "log",
-          title: "Activity Log",
-        });
-      } catch (logError) {
-        // Markdown log update failed but SQLite succeeded - don't crash
-        console.warn("[updateLog] Markdown log update failed:", logError);
-      }
     } catch (error) {
-      console.error("[updateLog] Critical error:", error);
+      console.error("[updateLog] Failed to log activity:", error);
       // Don't throw - this is just logging
     }
   }
@@ -469,6 +298,14 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
   // Get wiki stats
   @callable()
   async getWikiStats() {
+    // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+    if (!this.instance || !this.initialized) {
+      console.log(
+        "[Server getWikiStats] Wiki not initialized, attempting lazy init...",
+      );
+      await this.initializeWiki();
+    }
+
     if (!this.instance) {
       return { initialized: false, stats: null };
     }
@@ -498,6 +335,14 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     contentType: string,
     docType: "journal" | "article" | "note" | "goal" | "health" = "note",
   ) {
+    // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+    if (!this.instance || !this.initialized) {
+      console.log(
+        "[Server ingestFile] Wiki not initialized, attempting lazy init...",
+      );
+      await this.initializeWiki();
+    }
+
     if (!this.instance) {
       return { error: "Wiki not initialized" };
     }
@@ -590,6 +435,14 @@ This is your personal wiki agent with **hybrid search** (vector + keyword with R
     });
     console.log("[Server queryWiki] Instance available:", !!this.instance);
     console.log("[Server queryWiki] Initialized:", this.initialized);
+
+    // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+    if (!this.instance || !this.initialized) {
+      console.log(
+        "[Server queryWiki] Wiki not initialized, attempting lazy init...",
+      );
+      await this.initializeWiki();
+    }
 
     if (!this.instance) {
       console.error("[Server queryWiki] ERROR: Wiki not initialized");
@@ -809,6 +662,11 @@ ${getSchedulePrompt({ date: new Date() })}`,
               .describe("Optional tags for categorization"),
           }),
           execute: async ({ title, content, docType, tags }) => {
+            // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+            if (!this.instance || !this.initialized) {
+              await this.initializeWiki();
+            }
+
             if (!this.instance) {
               return { error: "Wiki not initialized" };
             }
@@ -868,6 +726,11 @@ ${getSchedulePrompt({ date: new Date() })}`,
               .describe("Maximum number of results (default: 5)"),
           }),
           execute: async ({ query, retrievalType, maxResults }) => {
+            // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+            if (!this.instance || !this.initialized) {
+              await this.initializeWiki();
+            }
+
             if (!this.instance) {
               return { error: "Wiki not initialized" };
             }
@@ -905,6 +768,11 @@ ${getSchedulePrompt({ date: new Date() })}`,
             "Check wiki health and get suggestions for improvements.",
           inputSchema: z.object({}),
           execute: async () => {
+            // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+            if (!this.instance || !this.initialized) {
+              await this.initializeWiki();
+            }
+
             if (!this.instance) {
               return { error: "Wiki not initialized" };
             }
@@ -945,6 +813,11 @@ ${getSchedulePrompt({ date: new Date() })}`,
             "Get wiki statistics including page counts and search method details.",
           inputSchema: z.object({}),
           execute: async () => {
+            // Lazy initialization: re-initialize if needed (DOs lose state on hibernate)
+            if (!this.instance || !this.initialized) {
+              await this.initializeWiki();
+            }
+
             if (!this.instance) {
               return { error: "Wiki not initialized" };
             }
