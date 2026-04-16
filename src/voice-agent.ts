@@ -8,12 +8,7 @@ import {
 import { streamText, tool } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { z } from "zod";
-import {
-  searchWiki,
-  uploadDocument,
-  listDocuments,
-  getDocument
-} from "./ai-search";
+import { searchWiki, uploadDocument, listDocuments } from "./ai-search";
 
 /**
  * Voice-enabled wiki agent

@@ -134,7 +134,7 @@ export async function getDocument(
     content += decoder.decode();
 
     return content;
-  } catch (error) {
+  } catch (_error) {
     // Document doesn't exist - return null
     return null;
   }

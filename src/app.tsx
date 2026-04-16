@@ -272,31 +272,24 @@ function Chat() {
   });
 
   // Chat hook
-  const {
-    messages,
-    sendMessage,
-    clearHistory,
-    setMessages,
-    addToolApprovalResponse,
-    stop,
-    status
-  } = useAgentChat({
-    agent,
-    onToolCall: async (event) => {
-      if (
-        "addToolOutput" in event &&
-        event.toolCall.toolName === "getUserTimezone"
-      ) {
-        event.addToolOutput({
-          toolCallId: event.toolCall.toolCallId,
-          output: {
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString()
-          }
-        });
+  const { messages, sendMessage, addToolApprovalResponse, stop, status } =
+    useAgentChat({
+      agent,
+      onToolCall: async (event) => {
+        if (
+          "addToolOutput" in event &&
+          event.toolCall.toolName === "getUserTimezone"
+        ) {
+          event.addToolOutput({
+            toolCallId: event.toolCall.toolCallId,
+            output: {
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              localTime: new Date().toLocaleTimeString()
+            }
+          });
+        }
       }
-    }
-  });
+    });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -506,7 +499,7 @@ function Chat() {
 
     sendMessage({ role: "user", parts });
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-  }, [input, attachments, isStreaming, sendMessage, agent]);
+  }, [input, attachments, isStreaming, sendMessage]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !connected) return;
