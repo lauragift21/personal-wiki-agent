@@ -86,8 +86,7 @@ export async function uploadDocument(
       metadata: stringMetadata
     });
     console.log("[uploadDocument] Upload SUCCESS:", key);
-    // Wait a bit for indexing to start
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Return immediately - indexing happens asynchronously
     return { ...result, status: "queued" };
   } catch (uploadError) {
     console.error("[uploadDocument] Upload failed:", uploadError);
