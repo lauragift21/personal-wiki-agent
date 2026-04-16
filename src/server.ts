@@ -837,6 +837,15 @@ export class ChatAgent extends AIChatAgent<Env> {
   }
 
   async onChatMessage(_onFinish: unknown, options?: OnChatMessageOptions) {
+    // Ensure we have messages - if not, we can't proceed
+    if (!this.messages || this.messages.length === 0) {
+      console.error("[onChatMessage] No messages available");
+      return new Response(JSON.stringify({ error: "No messages to process" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     const mcpTools = this.mcp.getAITools();
     const workersai = createWorkersAI({ binding: this.env.AI });
 
