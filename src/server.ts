@@ -15,13 +15,16 @@ import { searchWiki, uploadDocument, listDocuments } from "./ai-search";
 import { VoiceChatAgent } from "./voice-agent";
 import {
   initializeSessionsTable,
+  initializeChatMessagesTable,
   listSessions,
   createSession,
   getSession,
   renameSession,
   deleteSession,
   searchSessions,
-  updateSessionAfterMessage,
+  saveMessage,
+  loadMessages,
+  clearSessionMessages,
   formatTimeAgo as formatSessionTimeAgo,
   type ChatSession
 } from "./sessions";
@@ -81,6 +84,32 @@ export class ChatAgent extends AIChatAgent<Env> {
   private currentSessionId: string | null = null;
   private sessionsInitialized = false;
 
+  // Override persistMessages to save messages per session
+  async persistMessages(messages: typeof this.messages): Promise<void> {
+    if (!this.currentSessionId) {
+      // No active session, don't persist
+      return;
+    }
+
+    // Clear existing messages for this session and save new ones
+    clearSessionMessages(this, this.currentSessionId);
+
+    for (const msg of messages) {
+      // Extract text content from message parts
+      let content = "";
+      if (Array.isArray(msg.parts)) {
+        content = msg.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as { text?: string }).text || "")
+          .join("\n");
+      }
+
+      if (content) {
+        saveMessage(this, this.currentSessionId, msg.role, content);
+      }
+    }
+  }
+
   // Wrap methods with error handling to prevent crashes
   private safeExecute<T>(
     operation: string,
@@ -134,6 +163,7 @@ export class ChatAgent extends AIChatAgent<Env> {
     if (!this.sessionsInitialized) {
       console.log("[initializeSessionState] Initializing sessions table...");
       initializeSessionsTable(this);
+      initializeChatMessagesTable(this);
       this.sessionsInitialized = true;
     }
 
@@ -542,14 +572,35 @@ export class ChatAgent extends AIChatAgent<Env> {
     const session = getSession(this, sessionId);
     if (session) {
       this.currentSessionId = sessionId;
+
+      // Load messages for this session
+      const messages = loadMessages(this, sessionId);
+
+      // Clear current messages and reload from storage
+      this.messages.length = 0;
+      for (const msg of messages) {
+        this.messages.push({
+          role: msg.role as "user" | "assistant" | "system",
+          content: msg.content
+        } as unknown as (typeof this.messages)[0]);
+      }
+
       this.broadcast(
         JSON.stringify({
           type: "session-changed",
-          session
+          session,
+          messages: this.messages
         })
       );
     }
     return session;
+  }
+
+  @callable()
+  async getSessionMessages(
+    sessionId: string
+  ): Promise<Array<{ role: string; content: string }>> {
+    return loadMessages(this, sessionId);
   }
 
   @callable()
@@ -810,6 +861,7 @@ export class ChatAgent extends AIChatAgent<Env> {
       model: workersai("@cf/moonshotai/kimi-k2.5", {
         sessionAffinity: this.sessionAffinity
       }),
+      abortSignal: options?.abortSignal,
       system: `You are a Personal Wiki Agent with hybrid search capabilities. You help users build and query a personal knowledge base.
 
 ## Your Capabilities
@@ -1206,8 +1258,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
           }
         })
       },
-      stopWhen: stepCountIs(10),
-      abortSignal: options?.abortSignal
+      stopWhen: stepCountIs(10)
     });
 
     return result.toUIMessageStreamResponse();

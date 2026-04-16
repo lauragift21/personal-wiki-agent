@@ -278,6 +278,12 @@ function Chat() {
               description: data.description,
               timeout: 5000
             });
+          } else if (data.type === "session-changed" && data.messages) {
+            // Session changed - messages will be loaded from server
+            console.log(
+              "[WebSocket] Session changed, messages loaded:",
+              data.messages.length
+            );
           }
         } catch {}
       },
@@ -292,7 +298,8 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status
+    status,
+    setMessages
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -457,22 +464,10 @@ function Chat() {
 
       // Switch to chat tab
       setActiveTab("chat");
-
-      toasts.add({
-        title: "New chat started",
-        description: session.name,
-        timeout: 3000
-      });
     } catch (error) {
       console.error("[handleNewChat] Failed to create new session:", error);
-      toasts.add({
-        title: "Failed to start new chat",
-        description:
-          error instanceof Error ? error.message : "Please try again",
-        timeout: 3000
-      });
     }
-  }, [agent, clearHistory, setActiveTab, toasts, connected]);
+  }, [agent, clearHistory, setActiveTab, connected]);
 
   const handleSessionSelect = useCallback(
     async (sessionId: string) => {
@@ -492,26 +487,30 @@ function Chat() {
         const session = await agent.stub.setCurrentSession(sessionId);
         if (session) {
           setCurrentSessionId(sessionId);
-          clearHistory();
           setActiveTab("chat");
 
-          toasts.add({
-            title: "Switched to chat",
-            description: session.name,
-            timeout: 2000
-          });
+          // Load messages for this session from the server
+          const sessionMessages =
+            await agent.stub.getSessionMessages(sessionId);
+
+          // Convert server messages to UIMessage format
+          const uiMessages: UIMessage[] = sessionMessages.map(
+            (msg: { role: string; content: string }, index: number) => ({
+              id: `msg-${index}-${Date.now()}`,
+              role: msg.role as "user" | "assistant" | "system",
+              parts: [{ type: "text" as const, text: msg.content }],
+              content: msg.content
+            })
+          );
+
+          // Set messages in the client (this syncs to the server too)
+          setMessages(uiMessages);
         }
       } catch (error) {
         console.error("[handleSessionSelect] Failed to switch session:", error);
-        toasts.add({
-          title: "Failed to switch chat",
-          description:
-            error instanceof Error ? error.message : "Please try again",
-          timeout: 3000
-        });
       }
     },
-    [agent, currentSessionId, clearHistory, setActiveTab, toasts, connected]
+    [agent, currentSessionId, setActiveTab, connected, setMessages]
   );
 
   const addFiles = useCallback(
@@ -647,6 +646,24 @@ function Chat() {
     sendMessage({ role: "user", parts });
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }, [input, attachments, isStreaming, sendMessage, agent]);
+
+  // Track previous listening state for voice auto-send
+  const wasListeningRef = useRef(false);
+
+  // Auto-send message when voice input completes
+  useEffect(() => {
+    // When listening stops and we have input, auto-send
+    if (
+      wasListeningRef.current &&
+      !isListening &&
+      input.trim() &&
+      !isStreaming
+    ) {
+      console.log("[Voice] Auto-sending message after voice input");
+      send();
+    }
+    wasListeningRef.current = isListening;
+  }, [isListening, input, send, isStreaming]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !connected) return;
