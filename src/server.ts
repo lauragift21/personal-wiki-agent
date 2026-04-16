@@ -15,13 +15,16 @@ import { searchWiki, uploadDocument, listDocuments } from "./ai-search";
 import { VoiceChatAgent } from "./voice-agent";
 import {
   initializeSessionsTable,
+  initializeChatMessagesTable,
   listSessions,
   createSession,
   getSession,
   renameSession,
   deleteSession,
   searchSessions,
-  updateSessionAfterMessage,
+  saveMessage,
+  loadMessages,
+  clearSessionMessages,
   formatTimeAgo as formatSessionTimeAgo,
   type ChatSession
 } from "./sessions";
@@ -80,6 +83,32 @@ export class ChatAgent extends AIChatAgent<Env> {
   // Session management
   private currentSessionId: string | null = null;
   private sessionsInitialized = false;
+
+  // Override persistMessages to save messages per session
+  async persistMessages(messages: typeof this.messages): Promise<void> {
+    if (!this.currentSessionId) {
+      // No active session, don't persist
+      return;
+    }
+
+    // Clear existing messages for this session and save new ones
+    clearSessionMessages(this, this.currentSessionId);
+
+    for (const msg of messages) {
+      // Extract text content from message parts
+      let content = "";
+      if (Array.isArray(msg.parts)) {
+        content = msg.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as { text?: string }).text || "")
+          .join("\n");
+      }
+
+      if (content) {
+        saveMessage(this, this.currentSessionId, msg.role, content);
+      }
+    }
+  }
 
   // Wrap methods with error handling to prevent crashes
   private safeExecute<T>(
@@ -542,10 +571,15 @@ export class ChatAgent extends AIChatAgent<Env> {
     const session = getSession(this, sessionId);
     if (session) {
       this.currentSessionId = sessionId;
+
+      // Load messages for this session
+      const messages = loadMessages(this, sessionId);
+
       this.broadcast(
         JSON.stringify({
           type: "session-changed",
-          session
+          session,
+          messages
         })
       );
     }

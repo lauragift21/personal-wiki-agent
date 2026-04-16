@@ -290,6 +290,7 @@ function Chat() {
     messages,
     sendMessage,
     clearHistory,
+    setMessages,
     addToolApprovalResponse,
     stop,
     status
@@ -400,6 +401,38 @@ function Chat() {
       initSession();
     }
   }, [connected, agent.stub, currentSessionId]);
+
+  // Listen for session changes and load messages
+  useEffect(() => {
+    if (!agent) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "session-changed" && data.messages) {
+          console.log("[Client] Loading messages for session:", data.messages);
+          // Convert loaded messages to UIMessage format
+          const loadedMessages = data.messages.map(
+            (msg: { role: string; content: string }) => ({
+              role: msg.role,
+              content: [{ type: "text", text: msg.content }],
+              parts: [{ type: "text", text: msg.content }]
+            })
+          );
+          setMessages(loadedMessages);
+        }
+      } catch (error) {
+        console.error("[Client] Failed to parse message:", error);
+      }
+    };
+
+    // The agent connection has a websocket, listen for messages
+    const ws = (agent as unknown as { connection?: WebSocket })?.connection;
+    if (ws) {
+      ws.addEventListener("message", handleMessage);
+      return () => ws.removeEventListener("message", handleMessage);
+    }
+  }, [agent, setMessages]);
 
   // Fetch search suggestions when search tab is opened
   useEffect(() => {

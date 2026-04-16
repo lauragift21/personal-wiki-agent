@@ -218,17 +218,6 @@ export function ChatHistorySidebar({
             variant="ghost"
             size="sm"
             shape="square"
-            onClick={onNewChat}
-            aria-label="New chat"
-            title={connected ? "New chat" : "Connect to start new chat"}
-            disabled={!connected}
-          >
-            <PlusIcon size={18} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            shape="square"
             onClick={onToggle}
             aria-label="Close sidebar"
             title="Close sidebar"
