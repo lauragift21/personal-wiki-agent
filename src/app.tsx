@@ -11,7 +11,6 @@ import { code } from "@streamdown/code";
 import {
   PaperPlaneRightIcon,
   StopIcon,
-  TrashIcon,
   ChatCircleDotsIcon,
   MoonIcon,
   SunIcon,
@@ -778,13 +777,6 @@ function Chat() {
               />
             </div> */}
               <ThemeToggle />
-              <button
-                onClick={clearHistory}
-                className="p-2 rounded-lg hover:bg-[var(--color-warm-gray-100)] transition-colors"
-                title="Clear conversation"
-              >
-                <TrashIcon size={18} />
-              </button>
             </div>
           </div>
         </header>
