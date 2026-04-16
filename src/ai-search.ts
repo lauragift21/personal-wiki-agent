@@ -1,11 +1,4 @@
 /**
- * AI Search helper functions for the Personal Wiki Agent
- *
- * These functions wrap the Cloudflare AI Search binding operations
- * for document storage, retrieval, and hybrid search.
- */
-
-/**
  * Search the wiki using AI Search with hybrid retrieval
  *
  * @param instance - The AI Search instance to search
@@ -81,12 +74,10 @@ export async function uploadDocument(
   console.log("[uploadDocument] Content length:", content.length);
 
   try {
-    // Use regular upload (uploadAndPoll has issues with gzip responses in local dev)
     const result = await instance.items.upload(key, content, {
       metadata: stringMetadata
     });
     console.log("[uploadDocument] Upload SUCCESS:", key);
-    // Return immediately - indexing happens asynchronously
     return { ...result, status: "queued" };
   } catch (uploadError) {
     console.error("[uploadDocument] Upload failed:", uploadError);
@@ -121,7 +112,6 @@ export async function getDocument(
     const result = await item.download();
     if (!result || !result.body) return null;
 
-    // Read the stream into a string
     const reader = result.body.getReader();
     const decoder = new TextDecoder();
     let content = "";
@@ -135,7 +125,6 @@ export async function getDocument(
 
     return content;
   } catch (_error) {
-    // Document doesn't exist - return null
     return null;
   }
 }

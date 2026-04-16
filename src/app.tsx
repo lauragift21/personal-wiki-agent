@@ -17,11 +17,12 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   BrainIcon,
+  TrashIcon,
   XIcon,
   PaperclipIcon,
   ImageIcon,
   MagnifyingGlassIcon,
-  MicrophoneIcon
+  MicrophoneIcon,
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
@@ -61,7 +62,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text"
+    "application/vnd.oasis.opendocument.text",
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -78,7 +79,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt"
+    odt: "odt",
   };
   return typeMap[extension || ""] || "document";
 }
@@ -90,7 +91,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document"
+    fileType: isImage ? "image" : "document",
   };
 }
 
@@ -107,7 +108,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark"
+    () => document.documentElement.getAttribute("data-mode") === "dark",
   );
 
   const toggle = useCallback(() => {
@@ -132,7 +133,7 @@ function ThemeToggle() {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse
+  addToolApprovalResponse,
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -146,7 +147,7 @@ function ToolPartView({
   if (part.state === "output-available") {
     return (
       <div className="flex justify-start animate-fade-in">
-        <div className="max-w-[85%] px-4 py-3 tool-card">
+        <div className="max-w-[95%] sm:max-w-[85%] px-3 sm:px-4 py-2.5 sm:py-3 tool-card">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-sm font-medium text-[var(--color-warm-gray-700)]">
               {toolName}
@@ -165,11 +166,11 @@ function ToolPartView({
     const approvalId = (part.approval as { id?: string })?.id;
     return (
       <div className="flex justify-start animate-fade-in">
-        <div className="max-w-[85%] px-5 py-4 calmpaper border-amber-200">
+        <div className="max-w-[95%] sm:max-w-[85%] px-4 sm:px-5 py-3 sm:py-4 calmpaper border-amber-200">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-sm font-medium">Approve: {toolName}</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="primary"
               size="sm"
@@ -262,34 +263,40 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000
+              timeout: 5000,
             });
           }
         } catch {}
       },
-      [toasts]
-    )
+      [toasts],
+    ),
   });
 
   // Chat hook
-  const { messages, sendMessage, addToolApprovalResponse, stop, status } =
-    useAgentChat({
-      agent,
-      onToolCall: async (event) => {
-        if (
-          "addToolOutput" in event &&
-          event.toolCall.toolName === "getUserTimezone"
-        ) {
-          event.addToolOutput({
-            toolCallId: event.toolCall.toolCallId,
-            output: {
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              localTime: new Date().toLocaleTimeString()
-            }
-          });
-        }
+  const {
+    messages,
+    sendMessage,
+    clearHistory,
+    addToolApprovalResponse,
+    stop,
+    status,
+  } = useAgentChat({
+    agent,
+    onToolCall: async (event) => {
+      if (
+        "addToolOutput" in event &&
+        event.toolCall.toolName === "getUserTimezone"
+      ) {
+        event.addToolOutput({
+          toolCallId: event.toolCall.toolCallId,
+          output: {
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            localTime: new Date().toLocaleTimeString(),
+          },
+        });
       }
-    });
+    },
+  });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -301,9 +308,9 @@ function Chat() {
     audioLevel,
     error: voiceError,
     start: startVoiceInput,
-    stop: stopVoiceInput
+    stop: stopVoiceInput,
   } = useVoiceInput({
-    agent: "VoiceChatAgent"
+    agent: "VoiceChatAgent",
   });
 
   // Update input when voice transcript changes
@@ -322,7 +329,7 @@ function Chat() {
       toasts.add({
         title: "Voice input error",
         description: voiceError,
-        timeout: 5000
+        timeout: 5000,
       });
     }
   }, [voiceError, toasts]);
@@ -370,14 +377,14 @@ function Chat() {
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f)
+        (f) => f.type.startsWith("image/") || isDocumentFile(f),
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000
+          timeout: 5000,
         });
         return;
       }
@@ -408,11 +415,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000
+          timeout: 3000,
         });
       }
     },
-    [readFileAsText, toasts]
+    [readFileAsText, toasts],
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -442,7 +449,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles],
   );
 
   const send = useCallback(async () => {
@@ -464,7 +471,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri
+          url: dataUri,
         });
       } else if (att.fileType === "document") {
         // For text-based documents, include content in message for AI to ingest
@@ -509,7 +516,7 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10
+        10,
       );
       setSearchResults(result.results || []);
 
@@ -564,49 +571,60 @@ function Chat() {
         )}
 
         {/* Header */}
-        <header className="calm-header px-6 py-4">
-          <div className="max-w-3xl mx-auto flex items-center justify-between">
+        <header className="calm-header px-4 sm:px-6 py-3 sm:py-4">
+          <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
             {/* Logo - Fixed width */}
-            <div className="flex items-center gap-3 w-[120px]">
-              <WikiLogo size={36} />
-              <span className="text-xl font-semibold tracking-tight">wiki</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <WikiLogo size={28} className="sm:w-9 sm:h-9" />
+              <span className="text-lg sm:text-xl font-semibold tracking-tight hidden sm:block">
+                wiki
+              </span>
             </div>
 
             {/* Tabs - Prominent - Centered */}
             <div className="flex items-center justify-center bg-[var(--bg-tertiary)] rounded-lg p-1">
               <button
                 onClick={() => setActiveTab("chat")}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
                   activeTab === "chat"
                     ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
                 <ChatCircleDotsIcon
-                  size={18}
+                  size={16}
+                  className="sm:w-[18px] sm:h-[18px]"
                   weight={activeTab === "chat" ? "fill" : "regular"}
                 />
-                Chat
+                <span className="hidden sm:inline">Chat</span>
               </button>
               <button
                 onClick={() => setActiveTab("search")}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-md font-medium text-sm transition-all duration-200 ${
                   activeTab === "search"
                     ? "bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 }`}
               >
                 <MagnifyingGlassIcon
-                  size={18}
+                  size={16}
+                  className="sm:w-[18px] sm:h-[18px]"
                   weight={activeTab === "search" ? "fill" : "regular"}
                 />
-                Search
+                <span className="hidden sm:inline">Search</span>
               </button>
             </div>
 
             {/* Controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 sm:gap-3">
               <ThemeToggle />
+              <button
+                onClick={clearHistory}
+                className="p-2 rounded-lg hover:bg-[var(--color-warm-gray-100)] transition-colors"
+                title="Clear conversation"
+              >
+                <TrashIcon size={16} className="sm:w-[18px] sm:h-[18px]" />
+              </button>
             </div>
           </div>
         </header>
@@ -614,7 +632,7 @@ function Chat() {
         {/* Main Content */}
         <main className="flex-1 overflow-hidden">
           {activeTab === "chat" ? (
-            <div className="h-full flex flex-col max-w-3xl mx-auto px-6">
+            <div className="h-full flex flex-col max-w-3xl mx-auto px-3 sm:px-6">
               {/* Messages */}
               <div className="flex-1 overflow-y-auto scrollbar-hide py-6 space-y-6">
                 {messages.length === 0 ? (
@@ -631,24 +649,24 @@ function Chat() {
                         {[
                           {
                             text: "Search my wiki",
-                            description: "Find anything in your knowledge base"
+                            description: "Find anything in your knowledge base",
                           },
                           {
                             text: "Save a journal entry",
                             description:
-                              "Record thoughts, reflections, or daily notes"
+                              "Record thoughts, reflections, or daily notes",
                           },
                           {
                             text: "Upload and index a document",
-                            description: "Add files to make them searchable"
-                          }
+                            description: "Add files to make them searchable",
+                          },
                         ].map((prompt) => (
                           <button
                             key={prompt.text}
                             onClick={() =>
                               sendMessage({
                                 role: "user",
-                                parts: [{ type: "text", text: prompt.text }]
+                                parts: [{ type: "text", text: prompt.text }],
                               })
                             }
                             disabled={isStreaming}
@@ -693,7 +711,7 @@ function Chat() {
                             .filter(
                               (part) =>
                                 part.type === "reasoning" &&
-                                (part as { text?: string }).text?.trim()
+                                (part as { text?: string }).text?.trim(),
                             )
                             .map((part, i) => {
                               const reasoning = part as {
@@ -709,12 +727,15 @@ function Chat() {
                                   className="flex justify-start mb-4"
                                 >
                                   <details
-                                    className="max-w-[85%] w-full"
+                                    className="max-w-[95%] sm:max-w-[85%] w-full"
                                     open={!isDone}
                                   >
-                                    <summary className="flex items-center gap-2 cursor-pointer px-4 py-3 reasoning-box">
-                                      <BrainIcon size={16} />
-                                      <span className="font-medium">
+                                    <summary className="flex items-center gap-2 cursor-pointer px-3 sm:px-4 py-2.5 sm:py-3 reasoning-box">
+                                      <BrainIcon
+                                        size={14}
+                                        className="sm:w-4 sm:h-4"
+                                      />
+                                      <span className="font-medium text-sm sm:text-base">
                                         Thinking
                                       </span>
                                       <Badge
@@ -726,7 +747,7 @@ function Chat() {
                                         {isDone ? "Complete" : "In progress"}
                                       </Badge>
                                     </summary>
-                                    <pre className="mt-2 px-4 py-3 bg-[var(--color-warm-gray-50)] text-xs text-[var(--color-warm-gray-600)] whitespace-pre-wrap font-mono">
+                                    <pre className="mt-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-[var(--color-warm-gray-50)] text-xs text-[var(--color-warm-gray-600)] whitespace-pre-wrap font-mono overflow-auto max-h-48">
                                       {reasoning.text}
                                     </pre>
                                   </details>
@@ -737,7 +758,7 @@ function Chat() {
                           {message.parts
                             .filter(
                               (
-                                part
+                                part,
                               ): part is Extract<
                                 typeof part,
                                 { type: "file" }
@@ -745,7 +766,7 @@ function Chat() {
                                 part.type === "file" &&
                                 (
                                   part as { mediaType?: string }
-                                ).mediaType?.startsWith("image/") === true
+                                ).mediaType?.startsWith("image/") === true,
                             )
                             .map((part, i) => (
                               <div

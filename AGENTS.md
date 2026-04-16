@@ -6,7 +6,7 @@ A personal knowledge base with hybrid AI search (vector + keyword) built on Clou
 
 This is a full-stack application featuring:
 
-- **AI-powered hybrid search** using Cloudflare AI Search (vector + keyword with RRF fusion)
+- **AI-powered hybrid search** using Cloudflare AI Search (vector + keyword with reciprocal rank fusion (RRF))
 - **Stateful chat agent** with Durable Objects for persistent conversations
 - **Document ingestion** with automatic indexing
 - **Two-tab interface**: Chat (AI assistant) and Search (direct knowledge retrieval)

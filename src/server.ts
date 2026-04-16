@@ -377,7 +377,6 @@ export class ChatAgent extends AIChatAgent<Env> {
         message: `Successfully ingested "${fileName}" as ${docType}. Document ID: ${docId}`,
         docId,
         searchable: true,
-        method: "hybrid (vector + keyword with RRF fusion)"
       };
     } catch (error) {
       return {
@@ -681,7 +680,7 @@ If you see this pattern, extract the filename and content, then use the ingestDo
 When users ask questions, use queryWiki to search their knowledge base. This uses hybrid retrieval by default, combining:
 - **Vector search**: Semantic similarity (conceptually related content)
 - **Keyword search**: BM25 exact matching (precise term matches)
-- **RRF fusion**: Reciprocal Rank Fusion to combine both scores
+- **RRF**: Reciprocal Rank Fusion to combine both scores
 
 ### 3. Compare Search Methods
 Use compareSearchMethods to demonstrate the difference between vector, keyword, and hybrid search for the same query.
@@ -850,7 +849,6 @@ ${getSchedulePrompt({ date: new Date() })}`,
               docId,
               status: "uploading",
               searchable: false,
-              method: "hybrid (vector + keyword with RRF fusion)"
             };
           }
         }),
@@ -976,15 +974,7 @@ ${getSchedulePrompt({ date: new Date() })}`,
 
             return {
               totalPages: docs.length,
-              byCategory,
-              searchMethod: "Hybrid (vector + keyword with RRF fusion)",
-              features: [
-                "Vector index for semantic similarity",
-                "Keyword index (BM25) for exact matches",
-                "RRF fusion for optimal ranking",
-                "Per-request retrieval type override",
-                "Detailed scoring transparency"
-              ]
+              byCategory
             };
           }
         }),
