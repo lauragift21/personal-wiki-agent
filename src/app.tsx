@@ -27,7 +27,7 @@ import {
   BooksIcon,
   MicrophoneIcon,
   PhoneSlashIcon,
-  PhoneIcon
+  PhoneIcon,
 } from "@phosphor-icons/react";
 import { SearchResultCard } from "./components/SearchResultCard";
 import { SearchSkeleton } from "./components/SearchSkeleton";
@@ -66,7 +66,7 @@ function isDocumentFile(file: File): boolean {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text"
+    "application/vnd.oasis.opendocument.text",
   ];
   const documentExtensions = [".md", ".txt", ".pdf", ".doc", ".docx", ".odt"];
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
@@ -83,7 +83,7 @@ function getDocumentType(file: File): string {
     pdf: "pdf",
     doc: "word",
     docx: "word",
-    odt: "odt"
+    odt: "odt",
   };
   return typeMap[extension || ""] || "document";
 }
@@ -95,7 +95,7 @@ function createAttachment(file: File): DocumentAttachment {
     file,
     preview: isImage ? URL.createObjectURL(file) : "",
     mediaType: file.type || "application/octet-stream",
-    fileType: isImage ? "image" : "document"
+    fileType: isImage ? "image" : "document",
   };
 }
 
@@ -112,7 +112,7 @@ function fileToDataUri(file: File): Promise<string> {
 
 function ThemeToggle() {
   const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-mode") === "dark"
+    () => document.documentElement.getAttribute("data-mode") === "dark",
   );
 
   const toggle = useCallback(() => {
@@ -146,7 +146,7 @@ function ConnectionIndicator({ connected }: { connected: boolean }) {
 
 function ToolPartView({
   part,
-  addToolApprovalResponse
+  addToolApprovalResponse,
 }: {
   part: UIMessage["parts"][number];
   addToolApprovalResponse: (response: {
@@ -279,13 +279,13 @@ function Chat() {
             toasts.add({
               title: "Task completed",
               description: data.description,
-              timeout: 5000
+              timeout: 5000,
             });
           }
         } catch {}
       },
-      [toasts]
-    )
+      [toasts],
+    ),
   });
 
   // Chat hook
@@ -295,7 +295,7 @@ function Chat() {
     clearHistory,
     addToolApprovalResponse,
     stop,
-    status
+    status,
   } = useAgentChat({
     agent,
     onToolCall: async (event) => {
@@ -307,11 +307,11 @@ function Chat() {
           toolCallId: event.toolCall.toolCallId,
           output: {
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            localTime: new Date().toLocaleTimeString()
-          }
+            localTime: new Date().toLocaleTimeString(),
+          },
         });
       }
-    }
+    },
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
@@ -326,9 +326,9 @@ function Chat() {
     error: voiceError,
     startCall,
     endCall,
-    toggleMute
+    toggleMute,
   } = useVoiceAgent({
-    agent: "VoiceChatAgent"
+    agent: "VoiceChatAgent",
   });
 
   // Start voice call
@@ -342,7 +342,7 @@ function Chat() {
         title: "Voice call failed",
         description:
           "Could not start voice conversation. Please check microphone permissions.",
-        timeout: 5000
+        timeout: 5000,
       });
     }
   }, [startCall, toasts]);
@@ -396,14 +396,14 @@ function Chat() {
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const validFiles = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || isDocumentFile(f)
+        (f) => f.type.startsWith("image/") || isDocumentFile(f),
       );
       if (validFiles.length === 0) {
         toasts.add({
           title: "Invalid file type",
           description:
             "Please upload images (.jpg, .png, etc.) or documents (.md, .pdf, .doc, .docx, .txt)",
-          timeout: 5000
+          timeout: 5000,
         });
         return;
       }
@@ -434,11 +434,11 @@ function Chat() {
         toasts.add({
           title: "Files added",
           description: `Added ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}`,
-          timeout: 3000
+          timeout: 3000,
         });
       }
     },
-    [readFileAsText, toasts]
+    [readFileAsText, toasts],
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -468,7 +468,7 @@ function Chat() {
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles],
   );
 
   const send = useCallback(async () => {
@@ -491,7 +491,7 @@ function Chat() {
         imageParts.push({
           type: "file",
           mediaType: att.mediaType,
-          url: dataUri
+          url: dataUri,
         });
       } else if (att.fileType === "document") {
         // For text-based documents, ingest directly via RPC first
@@ -513,7 +513,7 @@ function Chat() {
           doc.file.name,
           doc.content || "",
           doc.file.type || "text/plain",
-          "note"
+          "note",
         );
 
         if (result.success) {
@@ -555,9 +555,17 @@ function Chat() {
       const result = await agent.stub.queryWiki(
         searchQuery.trim(),
         "hybrid",
-        10
+        10,
       );
       setSearchResults(result.results || []);
+
+      // Refresh suggestions after search to include this query
+      try {
+        const newSuggestions = await agent.stub.getSearchSuggestions();
+        setSearchSuggestions(newSuggestions);
+      } catch {
+        // Silently fail - suggestions are nice-to-have
+      }
     } catch (error) {
       console.error("[Search] Failed:", error);
       setSearchResults([]);
@@ -643,7 +651,7 @@ function Chat() {
                       className="w-1 bg-blue-500 rounded-full transition-all duration-100"
                       style={{
                         height: `${Math.max(20, Math.min(100, (audioLevel || 0) * 100 + Math.random() * 30))}%`,
-                        opacity: 0.3 + (i / 20) * 0.7
+                        opacity: 0.3 + (i / 20) * 0.7,
                       }}
                     />
                   ))}
@@ -815,14 +823,14 @@ function Chat() {
                         "Journal today's insights",
                         "Find my notes on ML",
                         "Ingest an article",
-                        "What did I learn last week?"
+                        "What did I learn last week?",
                       ].map((prompt) => (
                         <button
                           key={prompt}
                           onClick={() =>
                             sendMessage({
                               role: "user",
-                              parts: [{ type: "text", text: prompt }]
+                              parts: [{ type: "text", text: prompt }],
                             })
                           }
                           disabled={isStreaming}
@@ -866,7 +874,7 @@ function Chat() {
                           .filter(
                             (part) =>
                               part.type === "reasoning" &&
-                              (part as { text?: string }).text?.trim()
+                              (part as { text?: string }).text?.trim(),
                           )
                           .map((part, i) => {
                             const reasoning = part as {
@@ -905,12 +913,12 @@ function Chat() {
                         {message.parts
                           .filter(
                             (
-                              part
+                              part,
                             ): part is Extract<typeof part, { type: "file" }> =>
                               part.type === "file" &&
                               (
                                 part as { mediaType?: string }
-                              ).mediaType?.startsWith("image/") === true
+                              ).mediaType?.startsWith("image/") === true,
                           )
                           .map((part, i) => (
                             <div
