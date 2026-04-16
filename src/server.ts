@@ -579,9 +579,11 @@ export class ChatAgent extends AIChatAgent<Env> {
       // Clear current messages and reload from storage
       this.messages.length = 0;
       for (const msg of messages) {
+        // Format messages as UIMessage with parts array
         this.messages.push({
           role: msg.role as "user" | "assistant" | "system",
-          content: msg.content
+          content: [{ type: "text", text: msg.content }],
+          parts: [{ type: "text", text: msg.content }]
         } as unknown as (typeof this.messages)[0]);
       }
 
