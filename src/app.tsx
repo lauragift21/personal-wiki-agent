@@ -820,23 +820,33 @@ function Chat() {
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                       {[
-                        "Journal today's insights",
-                        "Find my notes on ML",
-                        "Ingest an article",
-                        "What did I learn last week?",
+                        {
+                          text: "Search my wiki",
+                          description: "Find anything in your knowledge base",
+                        },
+                        {
+                          text: "Save a journal entry",
+                          description:
+                            "Record thoughts, reflections, or daily notes",
+                        },
+                        {
+                          text: "Upload and index a document",
+                          description: "Add files to make them searchable",
+                        },
                       ].map((prompt) => (
                         <button
-                          key={prompt}
+                          key={prompt.text}
                           onClick={() =>
                             sendMessage({
                               role: "user",
-                              parts: [{ type: "text", text: prompt }],
+                              parts: [{ type: "text", text: prompt.text }],
                             })
                           }
                           disabled={isStreaming}
                           className="suggestion-pill px-4 py-2"
+                          title={prompt.description}
                         >
-                          {prompt}
+                          {prompt.text}
                         </button>
                       ))}
                     </div>
