@@ -490,12 +490,6 @@ function Chat() {
 
       // Switch to chat tab
       setActiveTab("chat");
-
-      toasts.add({
-        title: "New chat started",
-        description: session.name,
-        timeout: 3000
-      });
     } catch (error) {
       console.error("[handleNewChat] Failed to create new session:", error);
       toasts.add({
@@ -525,14 +519,8 @@ function Chat() {
         const session = await agent.stub.setCurrentSession(sessionId);
         if (session) {
           setCurrentSessionId(sessionId);
-          clearHistory();
           setActiveTab("chat");
-
-          toasts.add({
-            title: "Switched to chat",
-            description: session.name,
-            timeout: 2000
-          });
+          // Messages will be loaded via the session-changed broadcast
         }
       } catch (error) {
         console.error("[handleSessionSelect] Failed to switch session:", error);
